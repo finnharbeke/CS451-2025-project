@@ -17,9 +17,10 @@ public:
 
     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
       perror("couldn't create socket for sender\n");
+      exit(-1);
     }
 
-    const char *msg = "my first message!!";
+    const char *msg = "my first message!!\n";
     ssize_t bytes_sent;
 
     bytes_sent = sendto(sock, msg, strlen(msg), 0, reinterpret_cast<sockaddr*>(&receiver), sizeof(receiver));
@@ -29,6 +30,8 @@ public:
     } else {
       std::cout << "sent " << bytes_sent << " bytes!!" << std::endl;
     }
+
+    close(sock);
   }
 
 private:

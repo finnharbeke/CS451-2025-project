@@ -7,6 +7,7 @@
 #include <signal.h>
 
 #include "sender.cpp"
+#include "receiver.cpp"
 #include "config.cpp"
 
 static void stop(int) {
@@ -70,16 +71,24 @@ int main(int argc, char **argv) {
   PerfectConfig config(parser.configPath());
   
   struct sockaddr_in receiver;
+  std::vector<struct sockaddr_in> senders;
   for (Parser::Host host : hosts) {
     if (host.id == config.i) {
+      receiver.sin_family = AF_INET;
       receiver.sin_port = host.port;
       receiver.sin_addr.s_addr = host.ip;
+    } else {
+      struct sockaddr_in sender;
+      sender.sin_family = AF_INET;
+      sender.sin_port = host.port;
+      sender.sin_addr.s_addr = host.ip;
+      senders.push_back(sender);
     }
   }
 
   if (parser.id() == config.i) {
     std::cout << "i'm receiver" << std::endl;
-
+    Receiver(parser.id(), config.m, receiver, senders);
   } else {
     Sender sender(parser.id(), config.m, receiver);
   }
