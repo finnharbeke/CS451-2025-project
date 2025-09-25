@@ -1,40 +1,28 @@
+#pragma once
+
 #include <iostream>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include "parser.hpp"
+#include "fairloss.cpp"
 
 class Sender {
 public:
-  
-  Sender(long unsigned int id, int m, sockaddr_in receiver) {
+  Sender(unsigned long id, unsigned long m, sockaddr_in* receiver)
+    : receiver(receiver), id(id), m(m) {
     std::cout << "setting up sender with process id " << id << std::endl;
+  }
 
-    // make a socket:
-
-    int sock;
-
-    if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-      perror("couldn't create socket for sender\n");
-      exit(-1);
-    }
-
-    const char *msg = "my first message!!\n";
-    ssize_t bytes_sent;
-
-    bytes_sent = sendto(sock, msg, strlen(msg), 0, reinterpret_cast<sockaddr*>(&receiver), sizeof(receiver));
-
-    if (bytes_sent < 0) {
-      std::cout << "couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
-    } else {
-      std::cout << "sent " << bytes_sent << " bytes!!" << std::endl;
-    }
-
-    close(sock);
+  void main() {
+    network.send("fairloss message\n", receiver);
   }
 
 private:
-  int sock;
+  FairLoss network;
+  sockaddr_in* receiver;
+  unsigned long id;
+  unsigned long m;
 
 };

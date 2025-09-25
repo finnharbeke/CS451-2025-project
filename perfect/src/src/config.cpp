@@ -5,7 +5,7 @@
 
 struct PerfectConfig {
     public:
-        unsigned m, i;
+        unsigned long m, i;
         PerfectConfig(const char* configPath) {
             std::ifstream configFile(configPath);
             if (!configFile.is_open()) {
