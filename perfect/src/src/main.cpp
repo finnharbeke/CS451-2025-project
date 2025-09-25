@@ -6,6 +6,8 @@
 #include "hello.h"
 #include <signal.h>
 
+#include "sender.cpp"
+#include "config.cpp"
 
 static void stop(int) {
   // reset signal handlers to default
@@ -64,6 +66,23 @@ int main(int argc, char **argv) {
   std::cout << parser.configPath() << "\n\n";
 
   std::cout << "Doing some initialization...\n\n";
+
+  PerfectConfig config(parser.configPath());
+  
+  struct sockaddr_in receiver;
+  for (Parser::Host host : hosts) {
+    if (host.id == config.i) {
+      receiver.sin_port = host.port;
+      receiver.sin_addr.s_addr = host.ip;
+    }
+  }
+
+  if (parser.id() == config.i) {
+    std::cout << "i'm receiver" << std::endl;
+
+  } else {
+    Sender sender(parser.id(), config.m, receiver);
+  }
 
   std::cout << "Broadcasting and delivering messages...\n\n";
 
