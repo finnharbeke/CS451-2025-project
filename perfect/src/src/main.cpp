@@ -11,6 +11,10 @@
 #include "config.cpp"
 #include "fairloss.cpp"
 
+bool is_receiver;
+Receiver* receiver;
+Sender* sender;
+
 static void stop(int) {
   // reset signal handlers to default
   signal(SIGTERM, SIG_DFL);
@@ -21,6 +25,11 @@ static void stop(int) {
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
+
+  if (is_receiver)
+    receiver->close();
+  else
+    sender->close();
 
   // exit directly from signal handler
   exit(0);
@@ -72,7 +81,7 @@ int main(int argc, char **argv) {
   PerfectConfig config(parser.configPath());
   
   struct sockaddr_in rec_addr;
-  std::vector<struct sockaddr_in> senders;
+  std::vector<std::pair<unsigned long, sockaddr_in>> senders;
   for (Parser::Host host : hosts) {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -82,20 +91,22 @@ int main(int argc, char **argv) {
     if (host.id == config.i) {
       rec_addr = addr;
     } else {
-      senders.push_back(addr);
+      senders.push_back(std::pair(host.id, addr));
     }
   }
 
   if (parser.id() == config.i) {
+    is_receiver = true;
     std::cout << "i'm receiver\n";
-    Receiver receiver(parser.id(), config.m, &rec_addr, &senders);
+    receiver = new Receiver(parser.id(), parser.outputPath(), &rec_addr, &senders);
     std::cout << "Broadcasting and delivering messages...\n\n";
-    receiver.main();
+    receiver->main();
 
   } else {
-    Sender sender(parser.id(), config.m, &rec_addr);
+    is_receiver = false;
+    sender = new Sender(parser.id(), config.m, parser.outputPath(), &rec_addr);
     std::cout << "Broadcasting and delivering messages...\n\n";
-    sender.main();
+    sender->main();
   }
 
   std::cout << "All done, let's sleep!\n";

@@ -14,7 +14,7 @@ class FairLoss {
       }
     }
 
-    void send(const char* msg, sockaddr_in* dest) {
+    bool send(const char* msg, sockaddr_in* dest) {
       std::cout << "sending\n";
 
       ssize_t bytes_sent = sendto(sock, msg, strlen(msg), 0,
@@ -22,7 +22,9 @@ class FairLoss {
 
       if (bytes_sent < 0) {
         std::cout << "couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
+        return false;
       }
+      return true;
     }
 
     void bind_address(sockaddr_in* address) {
@@ -33,22 +35,23 @@ class FairLoss {
       }
     }
 
-    void receive() {
+    void receive(sockaddr_in* from, char* buffer) {
 
-      sockaddr_in from;
-      socklen_t from_len = sizeof(from);
+      
+      socklen_t from_len = sizeof(*from);
 
-      char buff[1024] = {0};
       std::cout << "reading..." << std::endl;
-      ssize_t msg_len = recvfrom(sock, buff, 1024, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
+      ssize_t msg_len = recvfrom(sock, buffer, 1024, 0, reinterpret_cast<sockaddr*>(from), &from_len);
       if (msg_len < 0) {
         perror("reading error...\n");
         close(sock);
         exit(-1);
       }
+
+
   
-      std::cout.write(buff, msg_len);
-      std::cout << from.sin_addr.s_addr << " " << from.sin_port << std::endl;
+      std::cout.write(buffer, msg_len);
+      std::cout << from->sin_addr.s_addr << " " << from->sin_port << std::endl;
     }
 
   private:
