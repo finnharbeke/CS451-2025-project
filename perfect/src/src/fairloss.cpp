@@ -33,12 +33,14 @@ class FairLoss {
       }
     }
 
-    void receive(sockaddr_in* from) {
-      socklen_t from_len = sizeof(*from);
+    void receive() {
+
+      sockaddr_in from;
+      socklen_t from_len = sizeof(from);
 
       char buff[1024] = {0};
       std::cout << "reading..." << std::endl;
-      ssize_t msg_len = recvfrom(sock, buff, 1024, 0, reinterpret_cast<sockaddr*>(from), &from_len);
+      ssize_t msg_len = recvfrom(sock, buff, 1024, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
       if (msg_len < 0) {
         perror("reading error...\n");
         close(sock);
@@ -46,6 +48,7 @@ class FairLoss {
       }
   
       std::cout.write(buff, msg_len);
+      std::cout << from.sin_addr.s_addr << " " << from.sin_port << std::endl;
     }
 
   private:

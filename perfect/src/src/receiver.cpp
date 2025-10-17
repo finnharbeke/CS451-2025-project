@@ -18,8 +18,9 @@ public:
   }
 
   void main() {
-    auto sender = senders->at(0);
-    network.receive(&sender);
+    while (true) {
+      network.receive();
+    }
   }
 
 private:

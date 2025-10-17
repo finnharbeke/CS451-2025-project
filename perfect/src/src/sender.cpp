@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <thread>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -16,7 +17,10 @@ public:
   }
 
   void main() {
-    network.send("fairloss message\n", receiver);
+    for (unsigned long i = 0; i < m; i++) {
+      network.send("fairloss message\n", receiver);
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
   }
 
 private:
