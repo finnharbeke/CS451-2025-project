@@ -24,26 +24,23 @@ public:
 
   void main() {
     while (true) {
-      sockaddr_in from;
-      char buffer[1024] = {0};
-      network.receive(&from, buffer);
-      parse(&from, buffer);
+      receive();
     }
   }
+  
+  void receive() {
+    unsigned long from;
+    char buffer[256] = {0};
+    char* ptr = buffer;
+    // char* msg;
+    network.receive(&from, &ptr);
 
-  void parse(sockaddr_in* from, char* buffer) {
-    unsigned long sender_id = 0;
-    for (std::pair<unsigned long, sockaddr_in> sender : *senders) {
-      if (sender.second.sin_port == from->sin_port) {
-        sender_id = sender.first;
-        break;
-      }
-    }
-    log(sender_id, buffer);
+    std::cout << "rec " << from << " " << *ptr << std::endl; 
+    log(from, ptr);
   }
 
-  void log(unsigned long sender, char* buffer) {
-    out << "d " << sender << " " << buffer << "\n";
+  void log(unsigned long sender, char* msg) {
+    out << "d " << sender << " " << msg << "\n";
   }
 
   void close() {

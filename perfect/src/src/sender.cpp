@@ -20,15 +20,22 @@ public:
 
   void main() {
     for (unsigned long i = 0; i < m; i++) {
-      const char* msg = std::to_string(i).c_str();
-      if (network.send(msg, receiver))
-        log(i+1);
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      send(i+1);
     }
   }
+  
+  void send(unsigned long msg) {
+    char buffer[256];
+    snprintf(buffer, 256, "%lu %lu", id, msg);
+    if (network.send(buffer, receiver)) {
+      std::cout << "sent " << id << " " << msg << std::endl;
+      log(msg);
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
 
-  void log(unsigned long seq_nr) {
-    out << "b " << seq_nr << "\n";
+  void log(unsigned long msg) {
+    out << "b " << msg << "\n";
   }
 
   void close() {
