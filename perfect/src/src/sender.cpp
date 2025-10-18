@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 
 #include "parser.hpp"
-#include "fairloss.cpp"
+#include "stubborn.cpp"
 
 class Sender {
 public:
@@ -43,7 +43,7 @@ public:
   }
 
 private:
-  FairLoss network;
+  Stubborn network;
   sockaddr_in* receiver;
   unsigned long id;
   unsigned long m;

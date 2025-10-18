@@ -15,13 +15,12 @@ class FairLoss {
     }
 
     bool send(const char* msg, sockaddr_in* dest) {
-      std::cout << "sending\n";
 
       ssize_t bytes_sent = sendto(sock, msg, strlen(msg), 0,
         reinterpret_cast<sockaddr*>(dest), sizeof(*dest));
 
       if (bytes_sent < 0) {
-        std::cout << "couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
+        std::cout << "fls couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
         return false;
       }
       return true;

@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 
 #include "parser.hpp"
-#include "fairloss.cpp"
+#include "stubborn.cpp"
 
 class Receiver {
 public:
@@ -49,7 +49,7 @@ public:
   }
 
 private:
-  FairLoss network;
+  Stubborn network;
   sockaddr_in* address;
   std::vector<std::pair<unsigned long, sockaddr_in>>* senders;
   char* outputPath;
