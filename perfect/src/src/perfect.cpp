@@ -5,29 +5,27 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include "fairloss.cpp"
+#include "stubborn.cpp"
 
-class Stubborn {
+class Perfect {
   public:
-    Stubborn() {}
+    Perfect() {}
 
     bool send_k(char id, char k, unsigned long seq_nr, struct sockaddr_in* dest) {
-      // while (true) {
-        fl.send_k(id, k, seq_nr, dest);
-      // }
+      st.send_k(id, k, seq_nr, dest);
       return true;
     }
 
     void bind_address(sockaddr_in* address) {
-      fl.bind_address(address);
+      st.bind_address(address);
     }
 
     void receive(unsigned long* sender_id, char** buffer) {
-      fl.receive(sender_id, buffer);
+      st.receive(sender_id, buffer);
 
-      std::cout << "st_r " << *sender_id << " " << *buffer << std::endl;
+      std::cout << "pf_r " << *sender_id << " " << *buffer << std::endl;
     }
 
   private:
-    FairLoss fl;
+    Stubborn st;
 };

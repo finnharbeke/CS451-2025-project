@@ -7,15 +7,13 @@
 #include <sys/socket.h>
 
 #include "parser.hpp"
-#include "stubborn.cpp"
+#include "perfect.cpp"
 
 class Receiver {
 public:
   
   Receiver(unsigned long id, const char* outputPath,
-      sockaddr_in* address,
-      std::vector<std::pair<unsigned long, sockaddr_in>>* senders)
-      : address(address), senders(senders) {
+      sockaddr_in* address) : address(address) {
     std::cout << "setting up receiver with process id " << id << std::endl;
     out.open(outputPath);
     std::cout << "opened file " << outputPath << " " << out.is_open() << " " << !out << std::endl;
@@ -35,7 +33,7 @@ public:
     // char* msg;
     network.receive(&from, &ptr);
 
-    std::cout << "rec " << from << " " << *ptr << std::endl; 
+    std::cout << "rec " << from << " " << ptr << std::endl; 
     log(from, ptr);
   }
 
@@ -49,9 +47,8 @@ public:
   }
 
 private:
-  Stubborn network;
+  Perfect network;
   sockaddr_in* address;
-  std::vector<std::pair<unsigned long, sockaddr_in>>* senders;
   char* outputPath;
   std::ofstream out;
 };

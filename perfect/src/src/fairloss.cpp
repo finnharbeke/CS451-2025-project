@@ -14,13 +14,35 @@ class FairLoss {
       }
     }
 
-    bool send(const char* msg, sockaddr_in* dest) {
+    bool send_k(char id, char k, unsigned long seq_nr, struct sockaddr_in* dest) {
+      // char + char + 8 * long + null
+      const char n = sizeof(unsigned long);
+      char buffer[2 + 8 * n + 1] = {0};
+      char* ptr = buffer;
+      *ptr = static_cast<char>(id + '0'); // at most 128 so fine
+      ptr++;
+      *ptr = static_cast<char>(k + '0'); // at most 8 so fine
+      ptr++;
+      for (char i = 0; i < k; i++) {
+        // write the longs as hexadecimals
+        snprintf(ptr, 2*n, "%lx", seq_nr + i);
+        while (*ptr != 0)
+          ptr++;
+        if (i < k - 1) {
+          *ptr = 31; // ascii unit separator as msg separator
+          ptr++;
+        }
+      }
 
-      ssize_t bytes_sent = sendto(sock, msg, strlen(msg), 0,
+      if (OO) {
+        std::cout << "fl_s sending buffer '" << buffer << "'\n";
+      }
+
+      ssize_t bytes_sent = sendto(sock, buffer, strlen(buffer), 0,
         reinterpret_cast<sockaddr*>(dest), sizeof(*dest));
 
       if (bytes_sent < 0) {
-        std::cout << "fls couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
+        std::cout << "fl_s couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
         return false;
       }
       return true;
@@ -44,12 +66,30 @@ class FairLoss {
         exit(-1);
       }
 
-      *sender_id = std::strtoul(*buffer, buffer, 10);
-      if (**buffer != '\0') // safety
-        (*buffer)++;
-      // printf("%.*s", 4, buff + 10);
+      char* end = *buffer + msg_len;
 
-      std::cout << "flr " << *sender_id << " " << *buffer << std::endl;
+      *sender_id = static_cast<char>(**buffer - '0');
+      (*buffer)++;
+      char k = static_cast<char>(**buffer - '0');
+      (*buffer)++;
+      
+      if (OO)
+        std::cout << "fl_r " << static_cast<int>(*sender_id)  << " " << static_cast<int>(k)  << " packets" << std::endl;
+      
+      std::cout << "fl_r buffer " << *buffer << std::endl;
+      for (char i = 0; i < k; i++) {
+        char* msg = *buffer;
+        char* sep = std::find(msg, end, static_cast<char>(31));
+        *sep = '\0';
+        if (OO)
+          std::cout << "fl_r " << static_cast<int>(*sender_id) << ": " << msg << std::endl;
+        *buffer = sep + 1;
+      }
+      // if (**buffer != '\0') // safety
+      //   (*buffer)++;
+      // // printf("%.*s", 4, buff + 10);
+
+      // std::cout << "fl_r " << *sender_id << " " << *buffer << std::endl;
     }
 
   private:
