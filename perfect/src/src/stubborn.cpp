@@ -11,7 +11,7 @@ class Stubborn {
   public:
     Stubborn() {}
 
-    bool send_k(char id, char k, unsigned long seq_nr, struct sockaddr_in* dest) {
+    bool send_k(char id, char k, unsigned int seq_nr, struct sockaddr_in* dest) {
       // while (true) {
         fl.send_k(id, k, seq_nr, dest);
       // }
@@ -22,10 +22,10 @@ class Stubborn {
       fl.bind_address(address);
     }
 
-    void receive(unsigned long* sender_id, char** buffer) {
+    void receive(unsigned char* sender_id, char** buffer) {
       fl.receive(sender_id, buffer);
 
-      std::cout << "st_r " << *sender_id << " " << *buffer << std::endl;
+      if (OO) std::cout << "st_r " << static_cast<short>(*sender_id) << " " << *buffer << std::endl;
     }
 
   private:

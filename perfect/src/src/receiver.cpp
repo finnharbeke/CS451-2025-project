@@ -12,12 +12,15 @@
 class Receiver {
 public:
   
-  Receiver(unsigned long id, const char* outputPath,
+  Receiver(unsigned long id_, const char* outputPath,
       sockaddr_in* address) : address(address) {
-    std::cout << "setting up receiver with process id " << id << std::endl;
+    if (OO) std::cout << "setting up receiver with process id " << id << std::endl;
+    
+    id = static_cast<char>(id_ & 0xFF); // by assumptions at most 128
     out.open(outputPath);
-    std::cout << "opened file " << outputPath << " " << out.is_open() << " " << !out << std::endl;
     network.bind_address(address);
+
+    if (OO) std::cout << "set up receiver " << static_cast<short>(id) << std::endl;
   }
 
   void main() {
@@ -27,7 +30,7 @@ public:
   }
   
   void receive() {
-    unsigned long from;
+    unsigned char from;
     char buffer[256] = {0};
     char* ptr = buffer;
     // char* msg;
@@ -49,6 +52,7 @@ public:
 private:
   Perfect network;
   sockaddr_in* address;
+  char id;
   char* outputPath;
   std::ofstream out;
 };

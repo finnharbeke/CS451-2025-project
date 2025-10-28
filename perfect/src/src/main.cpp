@@ -94,23 +94,19 @@ int main(int argc, char **argv) {
       rec_addr = addr;
   }
 
+  if (OO) std::cout << "Broadcasting and delivering messages...\n\n";
   if (parser.id() == config.i) {
     is_receiver = true;
-    if (OO) std::cout << "i'm receiver\n";
     receiver = new Receiver(parser.id(), parser.outputPath(), &rec_addr);
-    if (OO) std::cout << "Broadcasting and delivering messages...\n\n";
     receiver->main();
 
   } else {
     is_receiver = false;
     sender = new Sender(parser.id(), config.m, parser.outputPath(), &rec_addr);
-    if (OO) std::cout << "Broadcasting and delivering messages...\n\n";
     sender->main();
   }
 
-  if (OO) {
-    std::cout << "All done, let's sleep!\n";
-  }
+  if (OO) std::cout << "All done, let's sleep!\n";
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.

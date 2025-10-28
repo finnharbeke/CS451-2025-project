@@ -14,9 +14,9 @@ class FairLoss {
       }
     }
 
-    bool send_k(char id, char k, unsigned long seq_nr, struct sockaddr_in* dest) {
+    bool send_k(char id, char k, unsigned int seq_nr, struct sockaddr_in* dest) {
       // char + char + 8 * long + null
-      const char n = sizeof(unsigned long);
+      const char n = sizeof(unsigned int);
       char buffer[2 + 8 * n + 1] = {0};
       char* ptr = buffer;
       *ptr = static_cast<char>(id + '0'); // at most 128 so fine
@@ -25,7 +25,7 @@ class FairLoss {
       ptr++;
       for (char i = 0; i < k; i++) {
         // write the longs as hexadecimals
-        snprintf(ptr, 2*n, "%lx", seq_nr + i);
+        snprintf(ptr, 2*n, "%x", seq_nr + i);
         while (*ptr != 0)
           ptr++;
         if (i < k - 1) {
@@ -56,7 +56,7 @@ class FairLoss {
       }
     }
 
-    void receive(unsigned long* sender_id, char** buffer) {
+    void receive(unsigned char* sender_id, char** buffer) {
       sockaddr_in from;
       socklen_t from_len = sizeof(from);
       ssize_t msg_len = recvfrom(sock, *buffer, 256, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
@@ -68,7 +68,7 @@ class FairLoss {
 
       char* end = *buffer + msg_len;
 
-      *sender_id = static_cast<char>(**buffer - '0');
+      *sender_id = static_cast<unsigned char>(**buffer - '0');
       (*buffer)++;
       char k = static_cast<char>(**buffer - '0');
       (*buffer)++;
@@ -78,13 +78,17 @@ class FairLoss {
       
       std::cout << "fl_r buffer " << *buffer << std::endl;
       for (char i = 0; i < k; i++) {
+        std::cout << "fl_r buffer1 " << *buffer << std::endl;
         char* msg = *buffer;
         char* sep = std::find(msg, end, static_cast<char>(31));
         *sep = '\0';
         if (OO)
-          std::cout << "fl_r " << static_cast<int>(*sender_id) << ": " << msg << std::endl;
+        std::cout << "fl_r " << static_cast<int>(*sender_id) << ": " << msg << std::endl;
+        std::cout << "fl_r buffer2 " << *buffer << std::endl;
+        if (end != sep)
         *buffer = sep + 1;
       }
+      std::cout << "fl_r buffer3 " << *buffer << std::endl;
       // if (**buffer != '\0') // safety
       //   (*buffer)++;
       // // printf("%.*s", 4, buff + 10);
