@@ -13,7 +13,7 @@
 
 class Sender {
 public:
-  Sender(unsigned long id_, unsigned long m_, const char* outputPath, sockaddr_in* receiver)
+  Sender(unsigned long id_, unsigned long m_, const char* outputPath, struct sockaddr_in* receiver)
     : receiver(receiver) {
     if (OO) std::cout << "setting up sender with process id " << id_ << std::endl;
     
