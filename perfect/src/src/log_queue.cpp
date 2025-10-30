@@ -54,7 +54,8 @@ public:
     }
 
     static void log(std::ofstream* outfile, ReceiveLog* log) {
-        *outfile << "d " << log->sender << " " << log->msg << "\n";
+        unsigned int seq_nr = static_cast<unsigned int>(strtoul(log->msg, nullptr, 16));
+        (*outfile) << "d " << log->sender << " " << seq_nr << "\n";
     }
 
     private:

@@ -43,11 +43,14 @@ class FairLoss {
     void listen(std::function<void(ssize_t, char*)> callback) {
       sockaddr_in from;
       socklen_t from_len = sizeof(from);
-      char* buffer = static_cast<char*>(malloc(1024));
       ssize_t msg_len;
 
-      while (true) {
-        msg_len = recvfrom(sock, buffer, 1024, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
+      const size_t MAX = 128;
+      
+      for (int i = 0; i < 5; i++) {
+        char* buffer = static_cast<char*>(malloc(MAX));
+        if (OO) std::cout << "fl listening..." << std::endl;
+        msg_len = recvfrom(sock, buffer, MAX, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0) {
           perror("reading error...\n");
           // close(sock);

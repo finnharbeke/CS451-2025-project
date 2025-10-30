@@ -67,7 +67,6 @@ public:
     }
 
   }
-  void run_network() {}
 
   void keep_logging() {
     while (true) {
@@ -78,6 +77,8 @@ public:
       }
     }
   }
+
+  void run_network() {}
 
   char* compose_batch(unsigned char nr_msgs, unsigned int seq_nr) {
     if (nr_msgs > 8) {
@@ -97,10 +98,10 @@ public:
     snprintf(ptr, 2*n, "%x", msg_id);
     ++msg_id;
     while (*ptr != 0)
-      ++ptr;
+    ++ptr;
     *ptr = 31; // ascii unit separator as msg separator
     ++ptr;
-
+    
     for (char i = 0; i < nr_msgs; i++) {
       // write the longs as hexadecimals
       snprintf(ptr, 2*n, "%x", seq_nr + i);

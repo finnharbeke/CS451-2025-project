@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <functional>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -14,7 +15,7 @@ class Stubborn {
 
     bool send(char* msg, struct sockaddr_in* dest) {
       // while (true) {
-        // fl.send_k(id, k, seq_nr, dest);
+        fl.send(msg, dest);
       // }
       return true;
     }
@@ -35,6 +36,12 @@ class Stubborn {
       msg++;
       // TODO dupe checking
       callback(sender, msg, msg_len);
+    }
+
+    void listen(std::function<void(unsigned char, char*, ssize_t)> callback) {
+      auto fun = std::bind(&Stubborn::receive, this, callback,
+        std::placeholders::_1, std::placeholders::_2);
+      fl.listen(fun);
     }
 
   private:

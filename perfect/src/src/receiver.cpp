@@ -17,7 +17,7 @@ public:
   
   Receiver(unsigned long id_, const char* outputPath,
       sockaddr_in* address) : address(address) {
-    if (OO) std::cout << "setting up receiver with process id " << id << std::endl;
+    if (OO) std::cout << "setting up receiver with process id " << id_ << std::endl;
     
     id = static_cast<char>(id_ + '0'); // by assumptions at most 128
     out.open(outputPath);
@@ -27,7 +27,7 @@ public:
   }
 
   void main() {
-    std::thread listen(&Receiver::keep_listening, this);
+    std::thread listen(&Receiver::listen, this);
     listen.detach();
     std::thread logging(&Receiver::keep_logging, this);
     logging.detach();
@@ -39,17 +39,25 @@ public:
     out.close();
   }
 
-  void receive(ReceiveLog* log) {
-    queue.push(log);
+  void receive(unsigned char sender, char* msg) {
+    ReceiveLog log(sender, msg);
+    queue.push(&log);
   }
   
-  void keep_listening() {
-    auto fun = std::bind(&Receiver::receive, this, std::placeholders::_1);
+  void listen() {
+    auto fun = std::bind(&Receiver::receive, this,
+      std::placeholders::_1, std::placeholders::_2);
     network.listen(fun);
   }
   
   void keep_logging() {
-
+    while (true) {
+      ReceiveLog log;
+      
+      if (queue.pop(&log)) {
+        LogQueue<ReceiveLog>::log(&out, &log);
+      }
+    }
   }
 
   void log(unsigned long sender, char* msg) {
