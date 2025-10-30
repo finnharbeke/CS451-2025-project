@@ -1,6 +1,6 @@
 
-My PID: 11359
-From a new terminal type `kill -SIGINT 11359` or `kill -SIGTERM 11359` to stop processing packets
+My PID: 6091
+From a new terminal type `kill -SIGINT 6091` or `kill -SIGTERM 6091` to stop processing packets
 
 My ID: 3
 
@@ -24,10 +24,16 @@ Machine-readable IP: 16777343
 Human-readbale Port: 11003
 Machine-readbale Port: 64298
 
+4
+Human-readable IP: 127.0.0.1
+Machine-readable IP: 16777343
+Human-readbale Port: 11004
+Machine-readbale Port: 64554
+
 
 Path to output:
 ===============
-/media/sf_CS451-2025-project/example/output/proc03.output
+/media/sf_CS451/example/output/proc03.output
 
 Path to config:
 ===============
@@ -39,5 +45,11 @@ Broadcasting and delivering messages...
 
 setting up sender with process id 3
 set up sender 3
-fl_s sending buffer '3512345'
-3 sent 8 from 1
+detaching logger
+All done, let's sleep!
+keeping sending
+composed 3112345678
+sent smth
+creating log 1
+pushing log 1
+pushed log 1
