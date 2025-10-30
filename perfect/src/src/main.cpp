@@ -28,6 +28,7 @@ static void stop(int) {
     std::cout << "Writing output.\n";
   }
 
+  // what happens if logging thread logs after this guy closes ofstream
   if (is_receiver)
     receiver->close();
   else

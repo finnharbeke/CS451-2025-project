@@ -5,6 +5,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include "global.h"
+
 class FairLoss {
   public:
     FairLoss() {
@@ -14,31 +16,13 @@ class FairLoss {
       }
     }
 
-    bool send_k(char id, char k, unsigned int seq_nr, struct sockaddr_in* dest) {
-      // char + char + 8 * long + null
-      const char n = sizeof(unsigned int);
-      char buffer[2 + 8 * n + 1] = {0};
-      char* ptr = buffer;
-      *ptr = static_cast<char>(id + '0'); // at most 128 so fine
-      ptr++;
-      *ptr = static_cast<char>(k + '0'); // at most 8 so fine
-      ptr++;
-      for (char i = 0; i < k; i++) {
-        // write the longs as hexadecimals
-        snprintf(ptr, 2*n, "%x", seq_nr + i);
-        while (*ptr != 0)
-          ptr++;
-        if (i < k - 1) {
-          *ptr = 31; // ascii unit separator as msg separator
-          ptr++;
-        }
-      }
+    bool send(char* msg, struct sockaddr_in* dest) {
 
       if (OO) {
-        std::cout << "fl_s sending buffer '" << buffer << "'\n";
+        std::cout << "fl_s sending buffer '" << msg << "'\n";
       }
 
-      ssize_t bytes_sent = sendto(sock, buffer, strlen(buffer), 0,
+      ssize_t bytes_sent = sendto(sock, msg, strlen(msg), 0,
         reinterpret_cast<sockaddr*>(dest), sizeof(*dest));
 
       if (bytes_sent < 0) {

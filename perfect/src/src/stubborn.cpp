@@ -5,15 +5,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include "global.h"
 #include "fairloss.cpp"
 
 class Stubborn {
   public:
     Stubborn() {}
 
-    bool send_k(char id, char k, unsigned int seq_nr, struct sockaddr_in* dest) {
+    bool send(char* msg, struct sockaddr_in* dest) {
       // while (true) {
-        fl.send_k(id, k, seq_nr, dest);
+        // fl.send_k(id, k, seq_nr, dest);
       // }
       return true;
     }

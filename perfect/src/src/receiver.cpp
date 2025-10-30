@@ -16,17 +16,22 @@ public:
       sockaddr_in* address) : address(address) {
     if (OO) std::cout << "setting up receiver with process id " << id << std::endl;
     
-    id = static_cast<char>(id_ & 0xFF); // by assumptions at most 128
+    id = static_cast<char>(id_ + '0'); // by assumptions at most 128
     out.open(outputPath);
     network.bind_address(address);
 
-    if (OO) std::cout << "set up receiver " << static_cast<short>(id) << std::endl;
+    if (OO) std::cout << "set up receiver " << id << std::endl;
   }
 
   void main() {
     while (true) {
       receive();
     }
+  }
+
+  void close() {
+    std::cout << "closing" << std::endl;
+    out.close();
   }
   
   void receive() {
@@ -42,11 +47,6 @@ public:
 
   void log(unsigned long sender, char* msg) {
     out << "d " << sender << " " << msg << "\n";
-  }
-
-  void close() {
-    std::cout << "closing" << std::endl;
-    out.close();
   }
 
 private:

@@ -7,8 +7,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include "parser.hpp"
+#include "global.h"
 #include "perfect.cpp"
+#include "log_queue.cpp"
 
 class Sender {
 public:
@@ -16,39 +17,119 @@ public:
     : receiver(receiver) {
     if (OO) std::cout << "setting up sender with process id " << id_ << std::endl;
     
-    id = static_cast<char>(id_ & 0xFF); // by assumptions at most 128
-    m = static_cast<char>(m_ & 0x7FFFFFFF); // by assumptions at most 2^31-1
+    id = static_cast<char>(id_+ '0'); // by assumptions at most 128
+    m = static_cast<char>(m_); // by assumptions at most 2^31-1
     out.open(outputPath);
 
-    if (OO) std::cout << "set up sender " << static_cast<short>(id) << std::endl;
+    if (OO) std::cout << "set up sender " << id << std::endl;
   }
 
   void main() {
-    for (unsigned int i = 0; i < m; i += 8) {
-      send_k((m - i) < 8 ? static_cast<char>(m - i) : 8, i + 1);
-    }
+    std::thread keep(&Sender::keep_sending, this);
+    keep.detach();
+    std::thread run(&Sender::run_network, this);
+    run.detach();
+    std::thread logging(&Sender::keep_logging, this);
+    if (OO) std::cout << "detaching logger" << std::endl;
+    logging.detach();
+
   }
   
-  void send_k(char k, unsigned int seq_nr) {
-    if (network.send_k(id, k, seq_nr, receiver)) {
-      std::cout << static_cast<short>(id) << " sent 8 from " << seq_nr << std::endl;
-      log(seq_nr); // TODO
+    void close() {
+      out.close();
     }
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  void keep_sending() {
+    // TODO
+    // only send 512 new messages (arbitrary)
+    // if at most 512 still being sent by network
+    if (OO) std::cout << "keeping sending" << std::endl;
+    for (unsigned int i = 0; i < 512; i++) {
+      unsigned char k;
+      unsigned int d = m - seq_nr;
+      if (d < 7)
+        k = static_cast<char>(d + 1);
+      else
+        k = 8;
+      
+      char* msg = compose_batch(k, seq_nr);
+      if (OO) std::cout << "composed " << msg << std::endl;
+      if (network.send(msg, receiver)) {
+        if (OO) std::cout << "sent smth" << std::endl;
+        for (unsigned char j = 0; j < k; j++) {
+          if (OO) std::cout << "creating log " << seq_nr + j << std::endl;
+          SendLog log(seq_nr + j);
+          if (OO) std::cout << "pushing log " << log.seq_nr << std::endl;
+          queue.push(log);
+          if (OO) std::cout << "pushed log " << log.seq_nr << std::endl;
+        }
+      }
+      seq_nr += k;
+      if (seq_nr > m)
+        break;
+      if (CHILL) std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+  }
+  void run_network() {}
+
+  void keep_logging() {
+    while (true) {
+      SendLog log(0);
+      if (OO) std::cout << "trying to log" << std::endl;
+      
+      if (queue.pop(&log)) {
+        if (OO) std::cout << "logging " << log.seq_nr << std::endl;
+        LogQueue<SendLog>::log(&out, &log);
+      } else
+        if (OO) std::cout << "was empty" << std::endl;
+    }
   }
 
-  void log(unsigned long msg) {
-    out << "b " << msg << "\n";
-  }
+  char* compose_batch(unsigned char nr_msgs, unsigned int seq_nr) {
+    if (nr_msgs > 8) {
+      throw std::invalid_argument("'nr_msgs' larger than 8");
+    }
 
-  void close() {
-    out.close();
+    // char + int + (at most) 8 * (hex_int) + null
+    // id  | msg_id | content us content us content | null
+    const unsigned char n = sizeof(unsigned int);
+    char* buffer = static_cast<char*>(malloc(1 + n + 1 + 8 * 2*n + 1));
+    char* ptr = buffer;
+
+    // sender id
+    *ptr = id;
+    ++ptr;
+
+    snprintf(ptr, 2*n, "%x", msg_id);
+    ++msg_id;
+    while (*ptr != 0)
+      ++ptr;
+    *ptr = 31; // ascii unit separator as msg separator
+    ++ptr;
+
+    for (char i = 0; i < nr_msgs; i++) {
+      // write the longs as hexadecimals
+      snprintf(ptr, 2*n, "%x", seq_nr + i);
+      while (*ptr != 0)
+        ++ptr;
+      *ptr = 31; // ascii unit separator as msg separator
+      ++ptr;
+    }
+    // change back last one
+    --ptr;
+    *ptr = 0; // ascii unit separator as msg separator
+    
+    return buffer;
   }
 
 private:
   Perfect network;
   sockaddr_in* receiver;
   char id;
-  unsigned int m;
+  unsigned int m = 0;
+  unsigned int seq_nr = 1;
+  unsigned int msg_id = 1;
   std::ofstream out;
+  LogQueue<SendLog> queue;
 };

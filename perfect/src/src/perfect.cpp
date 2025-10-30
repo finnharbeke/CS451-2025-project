@@ -5,14 +5,15 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include "global.h"
 #include "stubborn.cpp"
 
 class Perfect {
   public:
     Perfect() {}
 
-    bool send_k(char id, char k, unsigned int seq_nr, struct sockaddr_in* dest) {
-      st.send_k(id, k, seq_nr, dest);
+    bool send(char* msg, struct sockaddr_in* dest) {
+      st.send(msg, dest);
       return true;
     }
 
