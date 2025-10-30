@@ -23,10 +23,18 @@ class Stubborn {
       fl.bind_address(address);
     }
 
-    void receive(unsigned char* sender_id, char** buffer) {
-      fl.receive(sender_id, buffer);
+    void receive(std::function<void(unsigned char, char*, ssize_t)> callback, ssize_t msg_len, char* buffer) {
 
-      if (OO) std::cout << "st_r " << static_cast<short>(*sender_id) << " " << *buffer << std::endl;
+      char* end = buffer + msg_len;
+
+      unsigned char sender = static_cast<unsigned char>(*buffer - '0');
+      char* msg = nullptr;
+      unsigned int msg_id = static_cast<unsigned int>(strtoul(buffer + 1, &msg, 16));
+      if (OO)
+        std::cout << "st_r " << static_cast<short>(sender)  << " " << msg_id << std::endl;
+      msg++;
+      // TODO dupe checking
+      callback(sender, msg, msg_len);
     }
 
   private:

@@ -35,9 +35,9 @@ public:
 
   }
   
-    void close() {
-      out.close();
-    }
+  void close() {
+    out.close();
+  }
 
   void keep_sending() {
     // TODO
@@ -55,13 +55,9 @@ public:
       char* msg = compose_batch(k, seq_nr);
       if (OO) std::cout << "composed " << msg << std::endl;
       if (network.send(msg, receiver)) {
-        if (OO) std::cout << "sent smth" << std::endl;
         for (unsigned char j = 0; j < k; j++) {
-          if (OO) std::cout << "creating log " << seq_nr + j << std::endl;
           SendLog log(seq_nr + j);
-          if (OO) std::cout << "pushing log " << log.seq_nr << std::endl;
-          queue.push(log);
-          if (OO) std::cout << "pushed log " << log.seq_nr << std::endl;
+          queue.push(&log);
         }
       }
       seq_nr += k;
@@ -75,14 +71,11 @@ public:
 
   void keep_logging() {
     while (true) {
-      SendLog log(0);
-      if (OO) std::cout << "trying to log" << std::endl;
+      SendLog log;
       
       if (queue.pop(&log)) {
-        if (OO) std::cout << "logging " << log.seq_nr << std::endl;
         LogQueue<SendLog>::log(&out, &log);
-      } else
-        if (OO) std::cout << "was empty" << std::endl;
+      }
     }
   }
 

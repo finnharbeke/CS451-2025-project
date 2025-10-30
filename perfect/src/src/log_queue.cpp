@@ -9,12 +9,14 @@
 struct SendLog {
     unsigned int seq_nr;
     SendLog(unsigned int seq_nr) : seq_nr(seq_nr) {}
+    SendLog() : seq_nr(0) {}
 };
 
 struct ReceiveLog {
     unsigned int sender;
     char* msg;
     ReceiveLog(unsigned int sender, char* msg) : sender(sender), msg(msg) {}
+    ReceiveLog() : sender(0), msg(nullptr) {}
 };
 
 // void log(*std::ofstream outfile, *SendLog log);
@@ -26,9 +28,9 @@ struct ReceiveLog {
 
 template <typename T> class LogQueue {
 public:
-    void push(T t) {
+    void push(T* t) {
         std::unique_lock<std::mutex> lock(mutx);
-        Q.push(t);
+        Q.push(*t);
     }
 
     bool pop(T* t) {
@@ -36,11 +38,8 @@ public:
         if (Q.empty())
             return false;
 
-        if (OO) std::cout << "trying to get front" << std::endl;
         *t = Q.front();
-        if (OO) std::cout << "got front" << std::endl;
         Q.pop();
-        if (OO) std::cout << "popped" << std::endl;
         return true;
     }
 

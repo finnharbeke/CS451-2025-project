@@ -7,6 +7,7 @@
 
 #include "global.h"
 #include "stubborn.cpp"
+#include "log_queue.cpp"
 
 class Perfect {
   public:
@@ -21,10 +22,30 @@ class Perfect {
       st.bind_address(address);
     }
 
-    void receive(unsigned char* sender_id, char** buffer) {
-      st.receive(sender_id, buffer);
+    void receive(unsigned char sender, char* msg, ssize_t msg_len) {
+      char* end = msg + msg_len;
+      char* sep = msg;
+      while (sep != end) {
+        char* sub_msg = sep;
+        char* sep = std::find(msg, end, static_cast<char>(31));
+        *sep = '\0';
+        if (OO)
+          std::cout << "pf_r " << static_cast<int>(sender) << ": " << sub_msg << std::endl;
+        if (end != sep)
+          sep++;
+      }
 
-      std::cout << "pf_r " << static_cast<short>(*sender_id) << " " << *buffer << std::endl;
+      // if (OO) std::cout << "st_r " << static_cast<short>(*sender_id) << " " << *buffer << std::endl;
+      // std::cout << "pf_r " << static_cast<short>(sender) << " " << msg << std::endl;
+    }
+
+    void listen() {
+
+    }
+
+    void listen(std::function<void(ReceiveLog*)> callback) {
+      ReceiveLog l;
+
     }
 
   private:

@@ -2,12 +2,15 @@
 
 #include <iostream>
 #include <fstream>
+#include <thread>
+#include <functional>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include "parser.hpp"
 #include "perfect.cpp"
+#include "log_queue.cpp"
 
 class Receiver {
 public:
@@ -24,25 +27,29 @@ public:
   }
 
   void main() {
-    while (true) {
-      receive();
-    }
+    std::thread listen(&Receiver::keep_listening, this);
+    listen.detach();
+    std::thread logging(&Receiver::keep_logging, this);
+    logging.detach();
+
   }
 
   void close() {
     std::cout << "closing" << std::endl;
     out.close();
   }
-  
-  void receive() {
-    unsigned char from;
-    char buffer[256] = {0};
-    char* ptr = buffer;
-    // char* msg;
-    network.receive(&from, &ptr);
 
-    std::cout << "rec " << from << " " << ptr << std::endl; 
-    log(from, ptr);
+  void receive(ReceiveLog* log) {
+    queue.push(log);
+  }
+  
+  void keep_listening() {
+    auto fun = std::bind(&Receiver::receive, this, std::placeholders::_1);
+    network.listen(fun);
+  }
+  
+  void keep_logging() {
+
   }
 
   void log(unsigned long sender, char* msg) {
@@ -55,4 +62,5 @@ private:
   char id;
   char* outputPath;
   std::ofstream out;
+  LogQueue<ReceiveLog> queue;
 };
