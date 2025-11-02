@@ -3,19 +3,17 @@
 #include <thread>
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
 
 #include "parser.hpp"
 #include "global.h"
 #include <signal.h>
 
-#include "sender.cpp"
-#include "receiver.cpp"
+#include "process.cpp"
 #include "config.cpp"
 #include "fairloss.cpp"
 
-bool is_receiver;
-Receiver* receiver;
-Sender* sender;
+Process* proc;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -31,10 +29,7 @@ static void stop(int) {
   }
 
   // what happens if logging thread logs after this guy closes ofstream
-  if (is_receiver)
-    receiver->close();
-  else
-    sender->close();
+  proc->close();
 
   // exit directly from signal handler
   exit(0);
@@ -86,28 +81,28 @@ int main(int argc, char **argv) {
   
   PerfectConfig config(parser.configPath());
   
-  struct sockaddr_in rec_addr;
+  std::unordered_map<unsigned char, struct sockaddr_in> addrs;
+  sockaddr_in rec_addr;
+  sockaddr_in my_addr;
   for (Parser::Host host : hosts) {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = host.port;
     addr.sin_addr.s_addr = host.ip;
     
+    addrs[static_cast<unsigned char>(host.id)] = addr;
     if (host.id == config.i)
       rec_addr = addr;
+    if (host.id == parser.id())
+      my_addr = addr;
   }
 
+  // std::ios_base::sync_with_stdio(false);
+  // std::cin.tie(nullptr);
   if (OO >= 1) std::cout << "Broadcasting and delivering messages...\n\n";
-  if (parser.id() == config.i) {
-    is_receiver = true;
-    receiver = new Receiver(parser.id(), parser.outputPath(), &rec_addr);
-    receiver->main();
-
-  } else {
-    is_receiver = false;
-    sender = new Sender(parser.id(), config.m, parser.outputPath(), &rec_addr);
-    sender->main();
-  }
+  auto m = (parser.id() == config.i) ? 0 : config.m;
+  proc = new Process(parser.id(), config.i, m, parser.outputPath(), &addrs);
+  proc->main();
 
   if (OO >= 1) std::cout << "All done, let's sleep!\n";
 

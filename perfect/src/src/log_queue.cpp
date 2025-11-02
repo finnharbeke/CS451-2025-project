@@ -1,69 +1,105 @@
 #pragma once
 
 #include <fstream>
-
 #include <queue>
 #include <thread>
 #include <mutex>
+#include <chrono>
 
-struct SendLog {
-    unsigned int seq_nr;
-    SendLog(unsigned int seq_nr) : seq_nr(seq_nr) {}
-    SendLog() : seq_nr(0) {}
+#include "global.h"
+
+struct Log {
+    bool send;
+    unsigned int n; // seq_nr if send log, sender otherwise
+    char* msg = nullptr;
+    Log() : send(true), n(0) {} // empty
+    Log(unsigned int seq_nr) : send(true), n(seq_nr) {}
+    Log(unsigned char sender, char* msg) : send(false), n(sender), msg(msg) {}
 };
-
-struct ReceiveLog {
-    unsigned int sender;
-    char* msg;
-    ReceiveLog(unsigned int sender, char* msg) : sender(sender), msg(msg) {}
-    ReceiveLog() : sender(0), msg(nullptr) {}
-};
-
-// void log(*std::ofstream outfile, *SendLog log);
-// void log(*std::ofstream outfile, *SendLog log);
-// void log(*std::ofstream outfile, *SendLog log);
 
 // help from
 // https://www.geeksforgeeks.org/dsa/implement-thread-safe-queue-in-c/
 
-template <typename T> class LogQueue {
+class LogQueue {
 public:
+    LogQueue(const char* outputPath) {
+        out.open(outputPath);
+        buffer.reserve(LOGBUFSIZE);
+    }
+
     size_t size() {
-        // not thread-safe but doesn't matter
+        // now thread-safe apparently does matter
+        std::lock_guard<std::mutex> lock(mutx);
         return Q.size();
     }
 
-    void push(T* t) {
-        std::unique_lock<std::mutex> lock(mutx);
-        Q.push(*t);
+    void push(Log* l) {
+        std::lock_guard<std::mutex> lock(mutx);
+        Q.push(*l);
     }
 
-    bool pop(T* t) {
-        std::unique_lock<std::mutex> lock(mutx);
+    bool popnlog() {
+        std::lock_guard<std::mutex> lock(mutx);
         if (Q.empty())
             return false;
 
-        *t = Q.front();
+        Log l = Q.front();
         Q.pop();
+        log(l);
         return true;
     }
 
-    static void log(std::ofstream* outfile, SendLog* log) {
-        if (OO >= 1) std::cout << "logging " << log->seq_nr << std::endl;
-        // (*outfile).write("b ");
-        // (*outfile).write(log->seq_nr);
-        // (*outfile).write("\n");
-        (*outfile) << "b ";
-        (*outfile) << log->seq_nr;
-        (*outfile) << "\n";
+    void keep_logging() {
+        while (true) {
+            if (OO >= 3) std::cout << "log loop" << std::endl;
+            bool didlog = popnlog();
+            if (OOTIME && didlog) {
+                n_logged++;
+                if (n_logged % MSGS_2_TIME == 0) {
+                    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+                    std::cout << "Time (sec) for " << MSGS_2_TIME << " messages = " << 
+                    static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) /1000000.0  << std::endl;
+                    begin = end;
+                }
+            }
+        }
     }
 
-    static void log(std::ofstream* outfile, ReceiveLog* log) {
-        unsigned int seq_nr = static_cast<unsigned int>(strtoul(log->msg, nullptr, 16));
-        (*outfile) << "d " << log->sender << " " << seq_nr << "\n";
+    void start_logging() {
+        std::thread logging(&LogQueue::keep_logging, this);
+        logging.detach();
+    }
+
+    void log(Log& log) {
+        if (log.send) {
+            if (OO >= 1) std::cout << "logging " << log.n << std::endl;
+            buffer += "b ";
+            buffer += std::to_string(log.n);
+            buffer += "\n";
+        } else {
+            unsigned int seq_nr = static_cast<unsigned int>(strtoul(log.msg, nullptr, 16));
+            buffer += "d ";
+            buffer += std::to_string(log.n);
+            buffer += " ";
+            buffer += std::to_string(seq_nr);
+            buffer += "\n";
+        }
+        if (buffer.size() >= LOGBUFSIZE - LOGLINESIZE) {
+            out << buffer;
+            buffer.clear();
+        }
+    }
+    
+    void close() {
+        out << buffer;
+        out.close();
     }
 
     private:
-        std::queue<T> Q;
+        std::queue<Log> Q;
         std::mutex mutx;
+        std::string buffer;
+        std::ofstream out;
+        unsigned int n_logged = 0;
+        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 };

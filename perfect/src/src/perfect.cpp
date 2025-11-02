@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <functional>
+#include <unordered_map>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,27 +13,51 @@
 
 class Perfect {
   public:
-    Perfect() {}
-
-    void send(char* msg, struct sockaddr_in* dest) {
-      st.send(msg, dest);
-    }
-
-    void run() {
-      st.run();
-    }
+    Perfect(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_) : st(Stubborn(id_, addrs_)) {}
 
     void bind_address(sockaddr_in* address) {
       st.bind_address(address);
     }
 
+    void run(std::function<bool()> send_callback, std::function<void(unsigned char, char*)> receive_callback) {
+      std::thread send(&Perfect::new_messages, this, send_callback);
+      send.detach();
+      std::thread work1([&]{ st.send_messages(); });
+      work1.detach();
+      std::thread work2([&]{ st.send_acks(); });
+      work2.detach();
+      std::thread listen(&Perfect::listen, this, receive_callback);
+      listen.detach();
+    }
+
+    void new_messages(std::function<bool()> callback) {
+      bool done = callback();
+      while (!done) {
+        st.await_ready_for_more();
+        done = callback();
+      }
+      if (OO >= 1) std::cout << "done sending" << std::endl;
+    }
+
+    void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
+      st.send(msg_id, msg, dest);
+    }
+
+    void listen(std::function<void(unsigned char, char*)> callback) {
+      auto fun = std::bind(&Perfect::receive, this, callback,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+      st.listen(fun);
+    }
+
     void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
+      // receives message formated as
+      // char (sender) int (msg_id) | seq_nr | seq_nr | seq_nr ...
       char* sep = msg;
       if (OO >= 1)
         std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
       while (sep != end) {
         char* sub_msg = sep;
-        if (OO >= 1)
+        if (OO >= 2)
           std::cout << "rest buffer " << sub_msg << std::endl;
         sep = std::find(sep, end, static_cast<char>(31));
         // end sub_msg (instead of unit separator 31)
@@ -43,20 +68,13 @@ class Perfect {
         if (OO >= 1)
           std::cout << "pf_r " << static_cast<int>(sender)
             << ": " << sub_msg << std::endl;
-        // receive on sender
+
+        // receive callback
         callback(sender, sub_msg);
 
         if (end != sep)
           sep++;
-        // if (OO >= 1)
-        //   printf("end %p, sep %p, sub_msg %p", end, sep, sub_msg);
       }
-    }
-
-    void listen(std::function<void(unsigned char, char*)> callback) {
-      auto fun = std::bind(&Perfect::receive, this, callback,
-        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-      st.listen(fun);
     }
 
   private:
