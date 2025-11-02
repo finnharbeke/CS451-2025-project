@@ -15,13 +15,13 @@ class Sender {
 public:
   Sender(unsigned long id_, unsigned long m_, const char* outputPath, struct sockaddr_in* receiver)
     : receiver(receiver) {
-    if (OO) std::cout << "setting up sender with process id " << id_ << std::endl;
+    if (OO >= 1) std::cout << "setting up sender with process id " << id_ << std::endl;
     
     id = static_cast<char>(id_+ '0'); // by assumptions at most 128
-    m = static_cast<char>(m_); // by assumptions at most 2^31-1
+    m = static_cast<unsigned int>(m_); // by assumptions at most 2^31-1
     out.open(outputPath);
 
-    if (OO) std::cout << "set up sender " << id << std::endl;
+    if (OO >= 1) std::cout << "set up sender " << id << std::endl;
   }
 
   void main() {
@@ -30,7 +30,6 @@ public:
     std::thread run(&Sender::run_network, this);
     run.detach();
     std::thread logging(&Sender::keep_logging, this);
-    if (OO) std::cout << "detaching logger" << std::endl;
     logging.detach();
 
   }
@@ -40,37 +39,46 @@ public:
   }
 
   void keep_sending() {
-    // TODO
-    // only send 512 new messages (arbitrary)
-    // if at most 512 still being sent by network
-    if (OO) std::cout << "keeping sending" << std::endl;
-    for (unsigned int i = 0; i < 512; i++) {
-      unsigned char k;
-      unsigned int d = m - seq_nr;
-      if (d < 7)
+    while (true) {
+      if (queue.size() >= 512)
+        continue;
+      // only send 512 new messages (arbitrary)
+      // if at most 512 still being sent by network
+      if (OO >= 3) std::cout << "keeping sending" << std::endl;
+      for (unsigned int i = 0; i < 512; i++) {
+        if (OO >= 3) std::cout << "send loop" << std::endl;
+        
+        unsigned char k;
+        unsigned int d = m - seq_nr;
+        if (d < 7)
         k = static_cast<char>(d + 1);
-      else
+        else
         k = 8;
-      
-      char* msg = compose_batch(k, seq_nr);
-      if (OO) std::cout << "composed " << msg << std::endl;
-      if (network.send(msg, receiver)) {
+        
+        char* msg = compose_batch(k, seq_nr);
+        if (OO >= 2) std::cout << "composed " << msg << std::endl;
+        network.send(msg, receiver);
         for (unsigned char j = 0; j < k; j++) {
           SendLog log(seq_nr + j);
           queue.push(&log);
         }
+        
+        seq_nr += k;
+        if (seq_nr > m)
+          break;
+        if (OO >= 3) std::cout << "d " << d << " k " << k << " seq_nr " << seq_nr << " m " << m << std::endl;
+        if (CHILL) std::this_thread::sleep_for(std::chrono::milliseconds(200));
       }
-      seq_nr += k;
       if (seq_nr > m)
         break;
-      if (CHILL) std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
-
+    if (OO >= 1) std::cout << "process " << id << " done sending." << std::endl;
   }
 
   void keep_logging() {
     while (true) {
       SendLog log;
+      if (OO >= 3) std::cout << "log loop" << std::endl;
       
       if (queue.pop(&log)) {
         LogQueue<SendLog>::log(&out, &log);
@@ -78,7 +86,9 @@ public:
     }
   }
 
-  void run_network() {}
+  void run_network() {
+    network.run();
+  }
 
   char* compose_batch(unsigned char nr_msgs, unsigned int seq_nr) {
     if (nr_msgs > 8) {
@@ -102,7 +112,7 @@ public:
     *ptr = 31; // ascii unit separator as msg separator
     ++ptr;
     
-    for (char i = 0; i < nr_msgs; i++) {
+    for (unsigned char i = 0; i < nr_msgs; i++) {
       // write the longs as hexadecimals
       snprintf(ptr, 2*n, "%x", seq_nr + i);
       while (*ptr != 0)

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <thread>
 #include <functional>
+#include <chrono>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -17,13 +18,13 @@ public:
   
   Receiver(unsigned long id_, const char* outputPath,
       sockaddr_in* address) : address(address) {
-    if (OO) std::cout << "setting up receiver with process id " << id_ << std::endl;
+    if (OO >= 1) std::cout << "setting up receiver with process id " << id_ << std::endl;
     
     id = static_cast<char>(id_ + '0'); // by assumptions at most 128
     out.open(outputPath);
     network.bind_address(address);
 
-    if (OO) std::cout << "set up receiver " << id << std::endl;
+    if (OO >= 1) std::cout << "set up receiver " << id << std::endl;
   }
 
   void main() {
@@ -35,7 +36,7 @@ public:
   }
 
   void close() {
-    std::cout << "closing" << std::endl;
+    if (OO >= 1) std::cout << "closing" << std::endl;
     out.close();
   }
 
@@ -62,6 +63,15 @@ public:
 
   void log(unsigned long sender, char* msg) {
     out << "d " << sender << " " << msg << "\n";
+    if (OOTIME) {
+      n_logged++;
+      if (n_logged % MSGS_PER_TIME == 0) {
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        std::cout << "Time (sec) for " << MSGS_PER_TIME << " messages = " << 
+          static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) /1000000.0  << std::endl;
+        begin = end;
+      }
+    }
   }
 
 private:
@@ -71,4 +81,7 @@ private:
   char* outputPath;
   std::ofstream out;
   LogQueue<ReceiveLog> queue;
+  const unsigned int MSGS_PER_TIME = 100000;
+  unsigned int n_logged = 0;
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 };

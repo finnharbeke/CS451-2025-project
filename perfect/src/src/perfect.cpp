@@ -14,30 +14,33 @@ class Perfect {
   public:
     Perfect() {}
 
-    bool send(char* msg, struct sockaddr_in* dest) {
+    void send(char* msg, struct sockaddr_in* dest) {
       st.send(msg, dest);
-      return true;
+    }
+
+    void run() {
+      st.run();
     }
 
     void bind_address(sockaddr_in* address) {
       st.bind_address(address);
     }
 
-    void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, ssize_t msg_len) {
-      char* end = msg + msg_len;
+    void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
       char* sep = msg;
-      if (OO)
-        std::cout << "buffer (size " << msg_len << ") " << msg << std::endl;
+      if (OO >= 1)
+        std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
       while (sep != end) {
         char* sub_msg = sep;
-        if (OO)
+        if (OO >= 1)
           std::cout << "rest buffer " << sub_msg << std::endl;
         sep = std::find(sep, end, static_cast<char>(31));
         // end sub_msg (instead of unit separator 31)
-        *sep = '\0';
+        if (end != sep)
+          *sep = '\0';
 
         // receive
-        if (OO)
+        if (OO >= 1)
           std::cout << "pf_r " << static_cast<int>(sender)
             << ": " << sub_msg << std::endl;
         // receive on sender
@@ -45,10 +48,9 @@ class Perfect {
 
         if (end != sep)
           sep++;
+        // if (OO >= 1)
+        //   printf("end %p, sep %p, sub_msg %p", end, sep, sub_msg);
       }
-
-      // if (OO) std::cout << "st_r " << static_cast<short>(*sender_id) << " " << *buffer << std::endl;
-      // std::cout << "pf_r " << static_cast<short>(sender) << " " << msg << std::endl;
     }
 
     void listen(std::function<void(unsigned char, char*)> callback) {

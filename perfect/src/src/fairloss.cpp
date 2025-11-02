@@ -18,7 +18,7 @@ class FairLoss {
 
     bool send(char* msg, struct sockaddr_in* dest) {
 
-      if (OO) {
+      if (OO >= 2) {
         std::cout << "fl_s sending buffer '" << msg << "'\n";
       }
 
@@ -45,18 +45,24 @@ class FairLoss {
       socklen_t from_len = sizeof(from);
       ssize_t msg_len;
 
-      const size_t MAX = 128;
+      const ssize_t MAX = 128;
       
-      for (int i = 0; i < 5; i++) {
+      while (true) {
         char* buffer = static_cast<char*>(malloc(MAX));
-        if (OO) std::cout << "fl listening..." << std::endl;
+        if (OO >= 3) std::cout << "fl listening..." << std::endl;
         msg_len = recvfrom(sock, buffer, MAX, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0) {
           perror("reading error...\n");
           // close(sock);
           // exit(-1);
         }
-        if (OO) std::cout << "fl_r " << buffer << std::endl;
+        if (msg_len >= 0 && msg_len < MAX)
+          buffer[msg_len] = '\0';  // add null terminator
+        else {
+          if (OO >= 1) std::cout << "weird msg_len: " << msg_len << " buffer " << buffer << std::endl;
+          buffer[MAX - 1] = '\0';  // safety fallback
+        }
+        if (OO >= 2) std::cout << "fl_r " << buffer << std::endl;
         callback(msg_len, buffer);
       }
     }

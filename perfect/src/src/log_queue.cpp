@@ -28,6 +28,11 @@ struct ReceiveLog {
 
 template <typename T> class LogQueue {
 public:
+    size_t size() {
+        // not thread-safe but doesn't matter
+        return Q.size();
+    }
+
     void push(T* t) {
         std::unique_lock<std::mutex> lock(mutx);
         Q.push(*t);
@@ -44,7 +49,7 @@ public:
     }
 
     static void log(std::ofstream* outfile, SendLog* log) {
-        std::cout << "logging " << log->seq_nr << std::endl;
+        if (OO >= 1) std::cout << "logging " << log->seq_nr << std::endl;
         // (*outfile).write("b ");
         // (*outfile).write(log->seq_nr);
         // (*outfile).write("\n");

@@ -1,6 +1,8 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include <vector>
+#include <algorithm>
 
 #include "parser.hpp"
 #include "global.h"
@@ -20,7 +22,7 @@ static void stop(int) {
   signal(SIGTERM, SIG_DFL);
   signal(SIGINT, SIG_DFL);
 
-  if (OO) {
+  if (OO >= 1) {
     // immediately stop network packet processing
     std::cout << "Immediately stopping network packet processing.\n";
 
@@ -50,7 +52,7 @@ int main(int argc, char **argv) {
   parser.parse();
 
   auto hosts = parser.hosts();
-  if (OO) {
+  if (OO >= 1) {
     std::cout << std::endl;
 
     std::cout << "My PID: " << getpid() << "\n";
@@ -81,7 +83,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Doing some initialization...\n\n";
   }
-
+  
   PerfectConfig config(parser.configPath());
   
   struct sockaddr_in rec_addr;
@@ -95,7 +97,7 @@ int main(int argc, char **argv) {
       rec_addr = addr;
   }
 
-  if (OO) std::cout << "Broadcasting and delivering messages...\n\n";
+  if (OO >= 1) std::cout << "Broadcasting and delivering messages...\n\n";
   if (parser.id() == config.i) {
     is_receiver = true;
     receiver = new Receiver(parser.id(), parser.outputPath(), &rec_addr);
@@ -107,7 +109,7 @@ int main(int argc, char **argv) {
     sender->main();
   }
 
-  if (OO) std::cout << "All done, let's sleep!\n";
+  if (OO >= 1) std::cout << "All done, let's sleep!\n";
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
