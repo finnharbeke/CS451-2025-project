@@ -74,7 +74,7 @@ class Perfect {
           *sep = '\0';
 
         // receive
-        if (OO >= 1)
+        if (OO >= 2)
           std::cout << "pf_r " << static_cast<int>(sender)
             << ": " << sub_msg << std::endl;
 

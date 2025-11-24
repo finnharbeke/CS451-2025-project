@@ -3,6 +3,8 @@
 #include <iostream>
 #include <functional>
 #include <unordered_set>
+#include <set>
+#include <unordered_set>
 #include <unordered_map>
 
 #include <sys/types.h>
@@ -16,13 +18,18 @@
 #include "fairloss.cpp"
 
 struct StubbornMsg {
-  bool acked = false;
+  unsigned int msg_id;
   char* msg;
   struct sockaddr_in* dest;
   std::chrono::steady_clock::time_point next_send;
   unsigned char back_off = 0;
-  StubbornMsg(char* msg, sockaddr_in* dest) : msg(msg), dest(dest),
+  StubbornMsg(unsigned int msg_id, char* msg, sockaddr_in* dest) :
+    msg_id(msg_id), msg(msg), dest(dest),
     next_send(std::chrono::steady_clock::now()) {}
+
+  bool operator<(const StubbornMsg& other) const {
+    return (next_send < other.next_send);
+  }
 };
 
 class Stubborn {
@@ -56,10 +63,8 @@ class Stubborn {
     }
 
     void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
-      StubbornMsg* stbmsg = new StubbornMsg(msg, dest);
       std::lock_guard<std::mutex> lock(Q_mutx);
-      Q.push(stbmsg);
-      msg_index[msg_id] = stbmsg;
+      Q.emplace(msg_id, msg, dest);
       cv_empty.notify_one();
     }
 
@@ -67,7 +72,7 @@ class Stubborn {
       if (OO >= 3) std::cout << "running stubborn" << std::endl;
       while (true) {
         if (OO >= 3) std::cout << "run loop" << std::endl;
-        // run_acks();
+        
         next();
         send_cycles++;
       }
@@ -78,22 +83,36 @@ class Stubborn {
         std::unique_lock<std::mutex> lock(Q_mutx);
         cv_empty.wait(lock, [&]{ return !Q.empty(); });
       }
+
+      // sleep
+      std::this_thread::sleep_until((*Q.begin()).next_send);
       
-      std::unique_lock<std::mutex> lock(Q_mutx);
-      std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-      StubbornMsg* stbmsg = Q.front();
-      Q.pop();
-      if (stbmsg->acked) {
-        cv_ready.notify_one();
-        return;
+      StubbornMsg stbmsg = StubbornMsg(0, nullptr, nullptr);
+      {
+        std::unique_lock<std::mutex> lock(Q_mutx);
+        auto top = Q.begin();
+        stbmsg = *top;
+        Q.erase(top);
+        auto it = acked.find(stbmsg.msg_id);
+        if (it != acked.end()) {
+          // old message, throw out
+          {
+            std::unique_lock<std::mutex> lock(ackedset_mutx);
+            acked.erase(it);
+          }
+          cv_ready.notify_one(); // Q size decreased
+          return;
+        }
+        
+        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        stbmsg.next_send = now + std::chrono::milliseconds(1 << (3 + stbmsg.back_off));
+        stbmsg.back_off++;
+  
+        Q.insert(stbmsg);
       }
-      if (stbmsg->next_send < now) {
-        sent++;
-        fl.send(stbmsg->msg, stbmsg->dest);
-        stbmsg->next_send = now + std::chrono::milliseconds(1 << (3 + stbmsg->back_off));
-        stbmsg->back_off++;
-      }
-      Q.push(stbmsg);
+      fl.send(stbmsg.msg, stbmsg.dest);
+      sent++;
+      
     }
 
     void await_ready_for_more() {
@@ -266,12 +285,8 @@ class Stubborn {
           std::cout << "removing from sending: " << msg_id << std::endl;
         // remove msg_id from sending
         {
-          std::lock_guard<std::mutex> lock(Q_mutx);
-          auto it = msg_index.find(msg_id);
-          if (it != msg_index.end()) {
-            it->second->acked = true;
-            msg_index.erase(it);
-          }
+          std::lock_guard<std::mutex> lock(ackedset_mutx);
+          acked.emplace(msg_id);
         }
 
         if (end != sep)
@@ -302,8 +317,11 @@ class Stubborn {
     FairLoss fl;
     unsigned int ack_count = 0;
     std::unordered_set<unsigned long> lookup{};
-    std::queue<StubbornMsg*> Q;
-    std::unordered_map<unsigned int, StubbornMsg*> msg_index;
+    std::set<StubbornMsg> Q;
+    std::unordered_set<unsigned int> acked;
+    std::mutex ackedset_mutx;
+    // std::queue<StubbornMsg*> Q;
+    // std::unordered_map<unsigned int, StubbornMsg*> msg_index;
     std::mutex Q_mutx;
     std::mutex ack_mutx;
     std::condition_variable cv_ready;

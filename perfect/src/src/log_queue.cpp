@@ -68,7 +68,7 @@ public:
 
     void log(Log& log) {
         if (log.send) {
-            if (OO >= 1) std::cout << "logging " << log.n << std::endl;
+            if (OO >= 2) std::cout << "logging " << log.n << std::endl;
             buffer += "b ";
             buffer += std::to_string(log.n);
             buffer += "\n";
