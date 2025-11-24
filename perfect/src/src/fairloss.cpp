@@ -16,6 +16,12 @@ class FairLoss {
       }
     }
 
+    void stats() {
+      std::cout << sent - last_sent << "," << recv - last_recv << std::endl;
+      last_sent = sent;
+      last_recv = recv;
+    }
+
     bool send(char* msg, struct sockaddr_in* dest) {
 
       if (OO >= 2) {
@@ -29,6 +35,7 @@ class FairLoss {
         std::cout << "fl_s couldn't send, errno " << errno << ", " << strerror(errno) << std::endl;
         return false;
       }
+      sent++;
       return true;
     }
 
@@ -63,10 +70,16 @@ class FairLoss {
           buffer[MAX - 1] = '\0';  // safety fallback
         }
         if (OO >= 2) std::cout << "fl_r " << buffer << std::endl;
+        recv++;
         callback(msg_len, buffer);
       }
     }
 
   private:
     int sock;
+
+    unsigned int sent = 0;
+    unsigned int recv = 0;
+    unsigned int last_sent = 0;
+    unsigned int last_recv = 0;
 };

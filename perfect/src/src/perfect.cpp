@@ -30,6 +30,13 @@ class Perfect {
       listen.detach();
     }
 
+    void stats() {
+      std::cout << sent - last_sent << "," << recv - last_recv << ",";
+      st.stats();
+      last_sent = sent;
+      last_recv = recv;
+    }
+
     void new_messages(std::function<bool()> callback) {
       bool done = callback();
       while (!done) {
@@ -40,6 +47,7 @@ class Perfect {
     }
 
     void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
+      sent++;
       st.send(msg_id, msg, dest);
     }
 
@@ -52,6 +60,7 @@ class Perfect {
     void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
       // receives message formated as
       // char (sender) int (msg_id) | seq_nr | seq_nr | seq_nr ...
+      recv++;
       char* sep = msg;
       if (OO >= 1)
         std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
@@ -79,4 +88,9 @@ class Perfect {
 
   private:
     Stubborn st;
+    unsigned int sent = 0;
+    unsigned int recv = 0;
+
+    unsigned int last_sent = 0;
+    unsigned int last_recv = 0;
 };

@@ -27,6 +27,11 @@ public:
         buffer.reserve(LOGBUFSIZE);
     }
 
+    void stats() {
+        std::cout << n_logged - last_n_logged << ",";
+        last_n_logged = n_logged;
+    }
+
     size_t size() {
         // now thread-safe apparently does matter
         std::lock_guard<std::mutex> lock(mutx);
@@ -52,16 +57,7 @@ public:
     void keep_logging() {
         while (true) {
             if (OO >= 3) std::cout << "log loop" << std::endl;
-            bool didlog = popnlog();
-            if (OOTIME && didlog) {
-                n_logged++;
-                if (n_logged % MSGS_2_TIME == 0) {
-                    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-                    std::cout << "Time (sec) for " << MSGS_2_TIME << " messages = " << 
-                    static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count()) /1000000.0  << std::endl;
-                    begin = end;
-                }
-            }
+            n_logged += popnlog();
         }
     }
 
@@ -102,4 +98,6 @@ public:
         std::ofstream out;
         unsigned int n_logged = 0;
         std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        
+        unsigned int last_n_logged = 0;
 };
