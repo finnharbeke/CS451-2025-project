@@ -10,7 +10,7 @@ def collect(n, m, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,m_cmpsd,seq_nr,log,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,fl_s,fl_r\n"
+            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,fl_s,fl_r\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -36,7 +36,6 @@ if __name__ == "__main__":
     # df.drop(index=df[df['round'] >= cutoff].index, inplace=True)
     
     gb = df.groupby(by=['round', 'is_r']).agg('sum')
-    print(gb)
     iterator = gb.iterrows()
     ((r, _), senders) = next(iterator)
 
@@ -87,6 +86,10 @@ if __name__ == "__main__":
 
     sns.lineplot(data=df, x='wc', hue='pid', y='cpu')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-CPU.png'))
+    plt.clf()
+    
+    sns.lineplot(data=df, x='wc', hue='pid', y='ram')
+    plt.savefig(os.path.join(out_dir, f'{n}-{m}-RAM.png'))
     plt.clf()
 
     r_log_mean = df[df['is_r'] & (df['round'] <= df['round'].max()/2)]['log'].mean()

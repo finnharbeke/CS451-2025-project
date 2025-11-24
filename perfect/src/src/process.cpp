@@ -11,6 +11,7 @@
 #include "global.h"
 #include "perfect.cpp"
 #include "log_queue.cpp"
+#include "ram.cpp"
 
 class Process {
 public:
@@ -51,7 +52,7 @@ public:
     while (true) {
       std::this_thread::sleep_for(std::chrono::milliseconds(ST_INTERVAL_MILLIS));
 
-      stats(); // P-id,CPU,WC,m_count,seq_id
+      stats(); // P-id,CPU,WC,RAM,m_count,seq_id
       queue->stats(); // n_logged
       // PF  sent,received
       // STB sent,s_cycles,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar
@@ -67,6 +68,7 @@ public:
               << std::fixed << std::setprecision(0)
               << 1000.0 * static_cast<double>(c_end - c_start) / CLOCKS_PER_SEC << ","
               << std::chrono::duration<double, std::milli>(t_end - t_start).count() << ","
+              << getCurrentRAM() << ","
               << msg_count - last_msg_count << ","
               << seq_nr - last_seq_nr << ",";
 
