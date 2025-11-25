@@ -62,11 +62,11 @@ class Perfect {
       // char (sender) int (msg_id) | seq_nr | seq_nr | seq_nr ...
       recv++;
       char* sep = msg;
-      if (OO >= 1)
+      if (OO >= 4)
         std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
       while (sep != end) {
         char* sub_msg = sep;
-        if (OO >= 2)
+        if (OO >= 4)
           std::cout << "rest buffer " << sub_msg << std::endl;
         sep = std::find(sep, end, static_cast<char>(31));
         // end sub_msg (instead of unit separator 31)
@@ -74,7 +74,7 @@ class Perfect {
           *sep = '\0';
 
         // receive
-        if (OO >= 2)
+        if (OO >= 3)
           std::cout << "pf_r " << static_cast<int>(sender)
             << ": " << sub_msg << std::endl;
 

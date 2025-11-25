@@ -56,7 +56,6 @@ public:
 
     void keep_logging() {
         while (true) {
-            if (OO >= 3) std::cout << "log loop" << std::endl;
             n_logged += popnlog();
         }
     }
@@ -68,12 +67,13 @@ public:
 
     void log(Log& log) {
         if (log.send) {
-            if (OO >= 2) std::cout << "logging " << log.n << std::endl;
+            if (OO >= 3) std::cout << "logging " << log.n << std::endl;
             buffer += "b ";
             buffer += std::to_string(log.n);
             buffer += "\n";
         } else {
             unsigned int seq_nr = static_cast<unsigned int>(strtoul(log.msg, nullptr, 16));
+            if (OO >= 3) std::cout << "logging " << seq_nr << " from " << log.n << std::endl;
             buffer += "d ";
             buffer += std::to_string(log.n);
             buffer += " ";

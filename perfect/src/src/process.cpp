@@ -84,17 +84,16 @@ public:
   bool send_batch() {
     if (seq_nr > m)
       return true;
-    if (OO >= 3) std::cout << "keeping sending" << std::endl;
+    if (OO >= 2) std::cout << "keeping sending from" << seq_nr << std::endl;
     // only send (MAX_PENDING >> 1) new messages
-    for (unsigned int i = 0; i < MAX_PENDING >> 1; i++) {
-      if (OO >= 3) std::cout << "send loop" << std::endl;
+    for (unsigned int i = 0; i < SEND_BURST; i++) {
       
       unsigned char k;
       unsigned int d = m - seq_nr + 1;
-      k = (d < 8) ? static_cast<char>(d) : 8;
+      k = (d < MAX_MSG_PER_PACKET) ? static_cast<char>(d) : MAX_MSG_PER_PACKET;
       
       char* msg = compose_batch(msg_count, k, seq_nr);
-      if (OO >= 2) std::cout << "composed " << msg << std::endl;
+      if (OO >= 4) std::cout << "composed " << msg << std::endl;
       network.send(msg_count++, msg, &(*addrs)[dest]);
 
       for (unsigned char j = 0; j < k; j++)
@@ -102,10 +101,10 @@ public:
       
       if (seq_nr > m)
         break;
-      if (OO >= 3) std::cout << "d " << d << " k " << k << " seq_nr " << seq_nr << " m " << m << std::endl;
     }
+    if (OO >= 2) std::cout << "sent until" << seq_nr-1 << std::endl;
     if (OO >= 1 && seq_nr > m) 
-      std::cout << "process " << id << " done sending." << std::endl;
+      std::cout << "process " << static_cast<short>(id) << " done sending." << std::endl;
     return false;
   }
 
@@ -115,21 +114,31 @@ public:
   }
 
   char* compose_batch(unsigned int msg_id, unsigned char nr_msgs, unsigned int seq_nr) {
-    if (nr_msgs > 8) {
+    if (nr_msgs > MAX_MSG_PER_PACKET) {
       throw std::invalid_argument("'nr_msgs' larger than 8");
     }
 
-    // char + int + (at most) 8 * (hex_int) + null
-    // id  | msg_id | content us content us content | null
-    const unsigned char n = sizeof(unsigned int) + 1;
-    char* buffer = static_cast<char*>(malloc(1 + n + 1 + 8 * 3*n + 1));
+    char* buffer = static_cast<char*>(malloc(PACKET_LEN));
     char* ptr = buffer;
 
     // sender id
     *ptr = static_cast<char>(id + '0'); // nicer
     ++ptr;
 
-    snprintf(ptr, 3*n, "%x", msg_id);
+    snprintf(ptr, _CMPRSD_S, "%x", msg_id);
+    while (*ptr != 0)
+    ++ptr;
+    *ptr = 31; // ascii unit separator as msg separator
+    ++ptr;
+
+    // TIMESTAMP
+    auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    unsigned int front = static_cast<unsigned int>(timestamp >> 32);
+    unsigned int back = static_cast<unsigned int>(timestamp & UINT32_MAX);
+    snprintf(ptr, _CMPRSD_S, "%x", front);
+    while (*ptr != 0)
+    ++ptr;
+    snprintf(ptr, _CMPRSD_S, "%x", back);
     while (*ptr != 0)
     ++ptr;
     *ptr = 31; // ascii unit separator as msg separator
@@ -137,7 +146,7 @@ public:
     
     for (unsigned char i = 0; i < nr_msgs; i++) {
       // write the longs as hexadecimals
-      snprintf(ptr, 3*n, "%x", seq_nr + i);
+      snprintf(ptr, _CMPRSD_S, "%x", seq_nr + i);
       while (*ptr != 0)
         ++ptr;
       *ptr = 31; // ascii unit separator as msg separator
@@ -145,7 +154,7 @@ public:
     }
     // change back last one
     --ptr;
-    *ptr = 0; // ascii unit separator as msg separator
+    *ptr = 0;
     
     return buffer;
   }
