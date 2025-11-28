@@ -31,12 +31,12 @@ const unsigned char _INT_S = sizeof(unsigned int); // in bytes, usually 4 ie max
 const unsigned char _CMPRSD_S = 8; // space for hexadecimal to write unsigned int
 
 // PACKET
-// id msg_id | timeppoint | seq_nr | seq_nr | seq_nr null
+// id msg_id | timepoint | seq_nr | seq_nr | seq_nr null
 const size_t PACKET_LEN = 1 + _CMPRSD_S + 1 + _TIME_S + (1+_CMPRSD_S) * MAX_MSG_PER_PACKET + 1;
 // ACK
 // id ack left | right null
 const size_t ACK_LEN = 2 + _CMPRSD_S + 1 + _CMPRSD_S + 1;
 // ACKACK
-// id ack ack ack_id null
-const size_t ACKACK_LEN = 3 + _CMPRSD_S + 1 + _CMPRSD_S + 1;
+// id ack ack timepoint | left | right null
+const size_t ACKACK_LEN = 3 + _TIME_S + 1 + _CMPRSD_S + 1 + _CMPRSD_S + 1;
 const long MAX_RECVD = static_cast<long>(PACKET_LEN);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <shared_mutex>
 
 struct Interval {
     unsigned int left; // including
@@ -25,6 +26,7 @@ class IntervalTree {
         IntervalTree() {}
         
         bool insert(unsigned int a) {
+            std::lock_guard lock(m);
             auto l = S.find(a); // first check if
             if (l != S.end()) // already contained
                 return false;
@@ -51,6 +53,7 @@ class IntervalTree {
         }
 
         bool erase(unsigned int a, unsigned int b) {
+            std::lock_guard lock(m);
             // we assume it's a subinterval
             auto l = S.find(a);
             auto r = S.find(b);
@@ -68,14 +71,24 @@ class IntervalTree {
             return true;
         }
 
-        auto cbegin() {
-            return S.cbegin();
-        }
-        
-        auto cend() {
-            return S.cend();
+        struct ReadView {
+            // keeps locked while in scope, and shared_lock allows multiple readers
+            std::shared_lock<std::shared_mutex> lock;
+            std::set<Interval, std::less<>>::const_iterator begin_it;
+            std::set<Interval, std::less<>>::const_iterator end_it;
+
+            ReadView(std::shared_mutex& m, const std::set<Interval, std::less<>>& s)
+                : lock(m), begin_it(s.cbegin()), end_it(s.cend()) {}
+            
+            auto begin() const { return begin_it; }
+            auto end()   const { return end_it; }
+        };
+
+        ReadView readView() const {
+            return ReadView(m, S);
         }
     
     private:
         std::set<Interval, std::less<>> S;
+        mutable std::shared_mutex m;
 };

@@ -28,7 +28,7 @@ public:
     }
 
     void stats() {
-        std::cout << n_logged - last_n_logged << ",";
+        std::cout << n_logged - last_n_logged << "," << Q.size() << ",";
         last_n_logged = n_logged;
     }
 
@@ -88,6 +88,7 @@ public:
     
     void close() {
         out << buffer;
+        out.flush();
         out.close();
     }
 
@@ -97,7 +98,6 @@ public:
         std::string buffer;
         std::ofstream out;
         unsigned int n_logged = 0;
-        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         
         unsigned int last_n_logged = 0;
 };

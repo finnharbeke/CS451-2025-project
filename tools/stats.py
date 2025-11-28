@@ -10,7 +10,7 @@ def collect(n, m, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,fl_s,fl_r\n"
+            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,logQ_size,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,fl_s,fl_r\n"
         ])
 
         for in_path in os.listdir(outputs):

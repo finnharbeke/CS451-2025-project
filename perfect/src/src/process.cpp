@@ -125,20 +125,15 @@ public:
     *ptr = static_cast<char>(id + '0'); // nicer
     ++ptr;
 
-    snprintf(ptr, _CMPRSD_S, "%x", msg_id);
+    snprintf(ptr, _CMPRSD_S+1, "%x", msg_id);
     while (*ptr != 0)
     ++ptr;
     *ptr = 31; // ascii unit separator as msg separator
     ++ptr;
 
     // TIMESTAMP
-    auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    unsigned int front = static_cast<unsigned int>(timestamp >> 32);
-    unsigned int back = static_cast<unsigned int>(timestamp & UINT32_MAX);
-    snprintf(ptr, _CMPRSD_S, "%x", front);
-    while (*ptr != 0)
-    ++ptr;
-    snprintf(ptr, _CMPRSD_S, "%x", back);
+    auto timestamp = std::chrono::system_clock::now().time_since_epoch().count();
+    snprintf(ptr, _TIME_S+1, "%.16lx", timestamp);
     while (*ptr != 0)
     ++ptr;
     *ptr = 31; // ascii unit separator as msg separator
@@ -146,7 +141,7 @@ public:
     
     for (unsigned char i = 0; i < nr_msgs; i++) {
       // write the longs as hexadecimals
-      snprintf(ptr, _CMPRSD_S, "%x", seq_nr + i);
+      snprintf(ptr, _CMPRSD_S+1, "%x", seq_nr + i);
       while (*ptr != 0)
         ++ptr;
       *ptr = 31; // ascii unit separator as msg separator

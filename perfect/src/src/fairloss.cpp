@@ -53,7 +53,7 @@ class FairLoss {
       ssize_t msg_len;
       
       while (true) {
-        char* buffer = static_cast<char*>(malloc(MAX_RECVD));
+        char buffer[MAX_RECVD];
         if (OO >= 4) std::cout << "fl listening..." << std::endl;
         msg_len = recvfrom(sock, buffer, MAX_RECVD, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0 || msg_len > MAX_RECVD) {
