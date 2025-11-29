@@ -10,7 +10,7 @@ def collect(n, m, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,logQ_size,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,fl_s,fl_r,fl_rq\n"
+            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,fl_s,fl_r,fl_rq\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -95,8 +95,9 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-RAM.png'))
     plt.clf()
 
-    r_log_mean = df[df['is_r'] & (df['round'] <= df['round'].max()/2)]['log'].mean()
-    s_log_mean = df[(~df['is_r']) & (df['round'] <= df['round'].max()/2)]['log'].mean()
+    r_log_mean = df[df['is_r'] & (df['round'] <= df['round'].max()/2)]['log_r'].mean()
+    s_log_mean = df[(~df['is_r']) & (df['round'] <= df['round'].max()/2)]['seq_nr'].mean()
+    df['log'] = df['log_r'] + df['seq_nr']
     sns.lineplot(data=df, x='wc', hue='pid', y='log')
     plt.title(f'R Mean: {r_log_mean:.0f}, S Mean: {s_log_mean:.0f}')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-LOGS.png'))

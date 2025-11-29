@@ -9,7 +9,6 @@
 
 #include "global.h"
 #include "stubborn.cpp"
-#include "log_queue.cpp"
 
 class Perfect {
   public:
