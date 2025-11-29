@@ -104,16 +104,16 @@ class Stubborn {
         auto top = Q.begin();
         stbmsg = *top;
         Q.erase(top);
-        auto it = acked.find(stbmsg.msg_id);
-        if (it != acked.end()) {
+        {
+          std::unique_lock<std::mutex> lock(ackedset_mutx);
+          auto it = acked.find(stbmsg.msg_id);
+          if (it != acked.end()) {
           // old message, throw out
-          {
-            std::unique_lock<std::mutex> lock(ackedset_mutx);
             acked.erase(it);
+            stbmsg.free_msg();
+            cv_ready.notify_one(); // Q size decreased
+            return;
           }
-          stbmsg.free_msg();
-          cv_ready.notify_one(); // Q size decreased
-          return;
         }
         
         std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
@@ -344,7 +344,7 @@ class Stubborn {
     FairLoss fl;
     std::function<void(unsigned char, char*, char*)> app_receive;
     std::unordered_set<unsigned long> lookup{};
-    std::set<StubbornMsg> Q;
+    std::multiset<StubbornMsg> Q;
     std::unordered_set<unsigned int> acked; // could be interval tree but idk since single removal
     std::mutex ackedset_mutx;
     // std::queue<StubbornMsg*> Q;
