@@ -6,20 +6,25 @@
 #include <sys/socket.h>
 
 #include "global.h"
+#include "readerwriterqueue.h"
 
 class FairLoss {
   public:
-    FairLoss() {
+    moodycamel::ReaderWriterQueue<std::pair<ssize_t, char*>> msg_queue;
+
+    FairLoss() : msg_queue(moodycamel::ReaderWriterQueue<std::pair<ssize_t, char*>>(MSGQSIZE)) {
       if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("couldn't create socket");
         exit(-1);
       }
+      // setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &RCVBUFSIZE, sizeof(RCVBUFSIZE));
     }
 
     void stats() {
-      std::cout << sent - last_sent << "," << recv - last_recv << std::endl;
+      std::cout << sent - last_sent << "," << recv - last_recv << "," << recv_in_q - last_recv_in_q << std::endl;
       last_sent = sent;
       last_recv = recv;
+      last_recv_in_q = recv_in_q;
     }
 
     bool send(char* msg, struct sockaddr_in* dest) {
@@ -47,13 +52,15 @@ class FairLoss {
       }
     }
 
-    void listen(std::function<void(ssize_t, char*)> callback) {
+    void listen() {
+      if (OO >= 1) std::cout << "listening on fairloss..." << std::endl;
       sockaddr_in from;
       socklen_t from_len = sizeof(from);
       ssize_t msg_len;
+      bool succeeded;
       
       while (true) {
-        char buffer[MAX_RECVD];
+        char* buffer = static_cast<char*>(malloc(MAX_RECVD));
         if (OO >= 4) std::cout << "fl listening..." << std::endl;
         msg_len = recvfrom(sock, buffer, MAX_RECVD, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0 || msg_len > MAX_RECVD) {
@@ -65,7 +72,9 @@ class FairLoss {
           buffer[msg_len] = '\0';  // add null terminator
           if (OO >= 4) std::cout << "fl_r " << buffer << std::endl;
           recv++;
-          callback(msg_len, buffer);
+          succeeded = msg_queue.try_enqueue(std::pair(msg_len, buffer));
+          if (succeeded)
+            recv_in_q++;
         }
       }
     }
@@ -75,6 +84,8 @@ class FairLoss {
 
     unsigned int sent = 0;
     unsigned int recv = 0;
+    unsigned int recv_in_q = 0;
     unsigned int last_sent = 0;
     unsigned int last_recv = 0;
+    unsigned int last_recv_in_q = 0;
 };

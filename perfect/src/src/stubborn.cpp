@@ -147,24 +147,39 @@ class Stubborn {
       fl.bind_address(address);
     }
 
-    void receive(std::function<void(unsigned char, char*, char*)> callback, ssize_t msg_len, char* buffer) {
-      if (OO >= 3) std::cout << "st got smth" << std::endl;
-      recv++;
-      char* end = buffer + msg_len;
-      unsigned char sender = static_cast<unsigned char>(*buffer - '0');
+    void receive(std::function<void(unsigned char, char*, char*)> receive_callback) {
+      if (OO >= 1) std::cout << "stubborn receiving..." << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
       
-      char second = *(buffer + 1);
-      if (second == 6) {
-        // ack
-        char third = *(buffer + 2);
-        if (third == 6) {
-          // ackack
-          receive_ackack(sender, buffer+3, end);
-        } else {
-          receive_ack(sender, buffer+2, end);
+      while (true) {
+        std::pair<ssize_t, char*> pair;
+        bool succeeded = fl.msg_queue.try_dequeue(pair);
+        if (!succeeded) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          if (OO >= 3) std::cout << "sleep in receive" << std::endl;
+          continue;
         }
-      } else {
-        receive_msg(callback, sender, buffer+1, end);
+        char* buffer = pair.second;
+        ssize_t msg_len = pair.first;
+
+        if (OO >= 3) std::cout << "st got smth" << std::endl;
+        recv++;
+        char* end = buffer + msg_len;
+        unsigned char sender = static_cast<unsigned char>(*buffer - '0');
+        
+        char second = *(buffer + 1);
+        if (second == 6) {
+          // ack
+          char third = *(buffer + 2);
+          if (third == 6) {
+            // ackack
+            receive_ackack(sender, buffer+3, end);
+          } else {
+            receive_ack(sender, buffer+2, end);
+          }
+        } else {
+          receive_msg(receive_callback, sender, buffer+1, end);
+        }
       }
     }
 
@@ -326,10 +341,8 @@ class Stubborn {
       }
     }
 
-    void listen(std::function<void(unsigned char, char*, char*)> callback) {
-      auto fun = std::bind(&Stubborn::receive, this, callback,
-        std::placeholders::_1, std::placeholders::_2);
-      fl.listen(fun);
+    void listen() {
+      fl.listen();
     }
 
   private:

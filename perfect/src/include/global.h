@@ -13,6 +13,8 @@ const bool STATS = 1;
 
 const unsigned long LOGBUFSIZE = 1 << 18; // 1/4 MiB, so for 128 proc, 32 MiB
 const unsigned long LOGLINESIZE = 64; // longest possible log line
+const unsigned long RCVBUFSIZE = 1 << 14; // 16 KiB, so for 128 proc, ...
+const unsigned long MSGQSIZE = 1 << 10; // 1024 msgs in queue at a time
 
 const unsigned long MAX_PENDING = 1024; // messages in queue at a time
 const unsigned long REFILL = 768; // when to start sending again

@@ -10,11 +10,11 @@
 
 struct Log {
     bool send;
-    unsigned int n; // seq_nr if send log, sender otherwise
-    char* msg = nullptr;
-    Log() : send(true), n(0) {} // empty
-    Log(unsigned int seq_nr) : send(true), n(seq_nr) {}
-    Log(unsigned char sender, char* msg) : send(false), n(sender), msg(msg) {}
+    unsigned char from; // sender
+    unsigned int seq_nr;
+    Log() {} // empty
+    Log(unsigned int seq_nr) : send(true), seq_nr(seq_nr) {}
+    Log(unsigned char sender, unsigned int seq_nr) : send(false), from(sender), seq_nr(seq_nr) {}
 };
 
 // help from
@@ -67,17 +67,16 @@ public:
 
     void log(Log& log) {
         if (log.send) {
-            if (OO >= 3) std::cout << "logging " << log.n << std::endl;
+            if (OO >= 3) std::cout << "logging " << static_cast<short>(log.seq_nr) << std::endl;
             buffer += "b ";
-            buffer += std::to_string(log.n);
+            buffer += std::to_string(log.seq_nr);
             buffer += "\n";
         } else {
-            unsigned int seq_nr = static_cast<unsigned int>(strtoul(log.msg, nullptr, 16));
-            if (OO >= 3) std::cout << "logging " << seq_nr << " from " << log.n << std::endl;
+            if (OO >= 3) std::cout << "logging " << log.seq_nr << " from " << static_cast<short>(log.from) << std::endl;
             buffer += "d ";
-            buffer += std::to_string(log.n);
+            buffer += std::to_string(static_cast<short>(log.from));
             buffer += " ";
-            buffer += std::to_string(seq_nr);
+            buffer += std::to_string(log.seq_nr);
             buffer += "\n";
         }
         if (buffer.size() >= LOGBUFSIZE - LOGLINESIZE) {

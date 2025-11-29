@@ -10,7 +10,7 @@ def collect(n, m, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,logQ_size,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,fl_s,fl_r\n"
+            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log,logQ_size,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,fl_s,fl_r,fl_rq\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -52,6 +52,7 @@ if __name__ == "__main__":
             aa_r=senders['aas'] / recv['aar'],
             ack_r=recv['ack_s'] / senders['ack_r'],
             fl_f_r=senders['fl_s'] / recv['fl_r'],
+            fl_f_rq=senders['fl_s'] / recv['fl_rq'],
             fl_b_r=recv['fl_s'] / senders['fl_r'],
         ))
         try:
@@ -63,14 +64,16 @@ if __name__ == "__main__":
     s_vs_r = pd.DataFrame(rows)
 
     sns.lineplot(data=s_vs_r, x='round', y='fl_f_r', label='FL forward SR ratio', palette=sns.color_palette('Set2'))
+    sns.lineplot(data=s_vs_r, x='round', y='fl_f_rq', label='FL forward SR ratio Q', palette=sns.color_palette('Set2'))
     sns.lineplot(data=s_vs_r, x='round', y='fl_b_r', label='FL backward SR ratio', palette=sns.color_palette('Set2'))
     sns.lineplot(data=s_vs_r, x='round', y='ack_r', label='Ack SR ratio', palette=sns.color_palette('Set2'))
     sns.lineplot(data=s_vs_r, x='round', y='aa_r', label='AckAck SR ratio', palette=sns.color_palette('Set2'))
     flf = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_f_r'].mean()
+    flfq = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_f_rq'].mean()
     flb = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_b_r'].mean()
     a = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['ack_r'].mean()
     aa = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['aa_r'].mean()
-    plt.title(f'FLF {flf:02.2f}, FLB {flb:02.2f}, Ack {a:02.2f}, AckAck {aa:02.2f}')
+    plt.title(f'FLF {flf:02.2f}, FLFQ {flfq:02.2f}, FLB {flb:02.2f}, Ack {a:02.2f}, AckAck {aa:02.2f}')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-ratios.png'))
     plt.clf()
     

@@ -26,8 +26,14 @@ class Perfect {
       work1.detach();
       std::thread work2([&]{ st.send_acks(); });
       work2.detach();
-      std::thread listen(&Perfect::listen, this, receive_callback);
+      std::thread listen(&Perfect::listen, this);
       listen.detach();
+      std::thread receiving([this, receive_callback]{ // capture by value not reference, other
+        auto fun = std::bind(&Perfect::receive, this, receive_callback,
+          std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+        this->st.receive(fun);
+      });
+      receiving.detach();
     }
 
     void stats() {
@@ -51,15 +57,13 @@ class Perfect {
       st.send(msg_id, msg, dest);
     }
 
-    void listen(std::function<void(unsigned char, char*)> callback) {
-      auto fun = std::bind(&Perfect::receive, this, callback,
-        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-      st.listen(fun);
+    void listen() {
+      st.listen();
     }
 
     void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
-      // receives message formated as
-      // char (sender) int (msg_id) | seq_nr | seq_nr | seq_nr ...
+      // receives message formatted as
+      // seq_nr | seq_nr | seq_nr ...
       recv++;
       char* sep = msg;
       if (OO >= 4)

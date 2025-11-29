@@ -36,6 +36,9 @@ public:
     auto receive = std::bind(&Process::log_receive, this,
       std::placeholders::_1, std::placeholders::_2);
     network.run(send, receive);
+    
+
+
     if (STATS) {
       std::thread statsing(&Process::keep_stats, this);
       statsing.detach();
@@ -77,7 +80,8 @@ public:
   }
 
   void log_receive(unsigned char sender, char* msg) {
-    Log log(sender, msg);
+    unsigned int seq_nr = static_cast<unsigned int>(strtoul(msg, nullptr, 16));
+    Log log(sender, seq_nr);
     queue->push(&log);
   }
 
