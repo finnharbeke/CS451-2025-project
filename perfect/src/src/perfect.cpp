@@ -12,15 +12,16 @@
 
 class Perfect {
   public:
-    Perfect(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_) : st(Stubborn(id_, addrs_)) {}
+    Perfect(unsigned char id_,
+      std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
+      std::function<bool()> application_send
+    ) : st(Stubborn(id_, addrs_, application_send)) {}
 
     void bind_address(sockaddr_in* address) {
       st.bind_address(address);
     }
 
-    void run(std::function<bool()> send_callback, std::function<void(unsigned char, char*)> receive_callback) {
-      std::thread send(&Perfect::new_messages, this, send_callback);
-      send.detach();
+    void run(std::function<void(unsigned char, char*)> receive_callback) {
       std::thread work1([&]{ st.send_messages(); });
       work1.detach();
       std::thread work2([&]{ st.send_acks(); });
@@ -40,15 +41,6 @@ class Perfect {
       st.stats();
       last_sent = sent;
       last_recv = recv;
-    }
-
-    void new_messages(std::function<bool()> callback) {
-      bool done = callback();
-      while (!done) {
-        st.await_ready_for_more();
-        done = callback();
-      }
-      if (OO >= 1) std::cout << "done sending" << std::endl;
     }
 
     void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {

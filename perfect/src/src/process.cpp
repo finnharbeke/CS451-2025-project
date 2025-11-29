@@ -22,7 +22,8 @@ class Process
 public:
   Process(unsigned long id_, unsigned long dest_id, unsigned long m_, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
-      : addrs(addrs_), id(static_cast<unsigned char>(id_)), network(Perfect(id, addrs))
+      : addrs(addrs_), id(static_cast<unsigned char>(id_)),
+      network(Perfect(id, addrs, std::bind(&Process::send_batch, this)))
   {
 
     if (OO >= 1)
@@ -42,10 +43,9 @@ public:
 
   void main()
   {
-    auto send = std::bind(&Process::send_batch, this);
     auto receive = std::bind(&Process::log_receive, this,
                              std::placeholders::_1, std::placeholders::_2);
-    network.run(send, receive);
+    network.run(receive);
 
     if (STATS)
     {
@@ -115,7 +115,7 @@ public:
     if (seq_nr > m)
       return true;
     if (OO >= 2)
-      std::cout << "keeping sending from" << seq_nr << std::endl;
+      std::cout << "keeping sending from " << seq_nr << std::endl;
     // only send (MAX_PENDING >> 1) new messages
     for (unsigned int i = 0; i < SEND_BURST; i++)
     {
@@ -141,7 +141,7 @@ public:
       check_buffer();
 
       if (seq_nr > m)
-        break;
+        return true;
     }
     if (OO >= 2)
       std::cout << "sent until" << seq_nr - 1 << std::endl;

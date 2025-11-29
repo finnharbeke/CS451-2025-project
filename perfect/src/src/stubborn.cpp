@@ -18,6 +18,7 @@
 #include "global.h"
 #include "fairloss.cpp"
 #include "interval_tree.cpp"
+#include "msg_codec.cpp"
 
 struct StubbornMsg {
   unsigned int msg_id;
@@ -40,8 +41,11 @@ struct StubbornMsg {
 
 class Stubborn {
   public:
-    Stubborn(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_)
-    : id(id_), addrs(addrs_) {
+    Stubborn(unsigned char id_,
+      std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
+      std::function<bool()> application_send
+    )
+    : id(id_), addrs(addrs_), app_send(application_send) {
       for (auto& [sender, _]: *addrs) {
         if (sender == id) continue;
         pending_acks.try_emplace(sender); // constructs default IT inplace
@@ -76,71 +80,57 @@ class Stubborn {
 
     void send_messages() {
       if (OO >= 1) std::cout << "running stubborn" << std::endl;
+      bool finished = false;
       while (true) {
+        if (!finished && Q.size() < REFILL) {
+          finished = app_send();
+        } else if (finished && Q.empty()) {
+          break;
+        }
+
         next();
+        
         send_cycles++;
       }
+      if (OO >= 1) std::cout << "nothing left to send in stubborn" << std::endl;
     }
 
-    void next() {
+    void next() { // guaranteed non-empty queue
 
       std::chrono::system_clock::time_point until;
-      {
-        std::unique_lock<std::mutex> lock(Q_mutx);
-        cv_empty.wait(lock, [&]{ return !Q.empty(); });
-        until = (*Q.begin()).next_send;
-      }
+      until = (*Q.begin()).next_send;
 
       // sleep
       std::this_thread::sleep_until(until);
       
       StubbornMsg stbmsg = StubbornMsg(0, nullptr, nullptr);
-      {
-        std::unique_lock<std::mutex> lock(Q_mutx);
-        auto top = Q.begin();
-        stbmsg = *top;
-        Q.erase(top);
-        auto it = acked.find(stbmsg.msg_id);
-        if (it != acked.end()) {
-          // old message, throw out
-          {
-            std::unique_lock<std::mutex> lock(ackedset_mutx);
-            acked.erase(it);
-          }
-          stbmsg.free_msg();
-          cv_ready.notify_one(); // Q size decreased
-          return;
+      auto top = Q.begin();
+      stbmsg = *top;
+      Q.erase(top);
+      auto it = acked.find(stbmsg.msg_id);
+      if (it != acked.end()) {
+        // old message, throw out
+        {
+          std::lock_guard<std::mutex> lock(ackedset_mutx);
+          acked.erase(it);
         }
-        
-        std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-        // adjust timestamp
-        auto ptr = stbmsg.msg;
-        while (*ptr != 31)
-          ptr++;
-        ptr++;
-        snprintf(ptr, _TIME_S+1, "%.16lx", now.time_since_epoch().count());
-        while (*ptr != 0)
-          ptr++;
-        *ptr = 31;
-
-        stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
-        if (stbmsg.back_off < MAX_BACKOFF)
-          stbmsg.back_off++;
-  
-        Q.insert(stbmsg);
+        stbmsg.free_msg();
+        return;
       }
-      if (OO >= 2) std::cout << "st_s " << stbmsg.msg_id << std::endl;
+      
+      std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+      
+      codec::adjust_timestamp(stbmsg.msg, now);
+
+      stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
+      if (stbmsg.back_off < MAX_BACKOFF)
+        stbmsg.back_off++;
+
+      Q.insert(stbmsg);
+      if (OO >= 2)
+        std::cout << "st_s " << stbmsg.msg_id << std::endl;
       fl.send(stbmsg.msg, stbmsg.dest);
       sent++;
-      
-    }
-
-    void await_ready_for_more() {
-      std::unique_lock<std::mutex> lock(Q_mutx);
-      cv_ready.wait(lock, [&](){
-        // std::cout << "checking " << Q.size() << std::endl;
-        return Q.size() < REFILL;
-      });
     }
 
     void bind_address(sockaddr_in* address) {
@@ -348,6 +338,9 @@ class Stubborn {
   private:
     unsigned char id;
     FairLoss fl;
+    std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
+    std::function<bool()> app_send;
+
     std::unordered_set<unsigned long> lookup{};
     std::set<StubbornMsg> Q;
     std::unordered_set<unsigned int> acked; // could be interval tree but idk since single removal
@@ -359,7 +352,6 @@ class Stubborn {
     std::condition_variable cv_ready;
     std::condition_variable cv_empty;
     std::condition_variable cv_acks;
-    std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
     std::unordered_map<unsigned char, IntervalTree> pending_acks;
     std::unordered_map<unsigned char, unsigned long> cutoffs;
 

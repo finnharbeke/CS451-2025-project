@@ -53,4 +53,13 @@ namespace codec
         return buffer;
     }
 
+    void adjust_timestamp(char* ptr, std::chrono::system_clock::time_point now);
+    void adjust_timestamp(char* ptr, std::chrono::system_clock::time_point now) {
+        while (*ptr != 31)
+            ptr++;
+        ptr++;
+        int written = snprintf(ptr, _TIME_S+1, "%.16lx", now.time_since_epoch().count());
+        ptr += written;
+        *ptr = 31;
+    }
 }
