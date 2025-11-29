@@ -12,27 +12,39 @@
 
 class Perfect {
   public:
-    Perfect(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_) : st(Stubborn(id_, addrs_)) {}
+    Perfect(unsigned char id_,
+      std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
+      std::function<bool()> app_send,
+      std::function<void(unsigned char, char*)> app_receive
+    ) :
+    st(
+      Stubborn(id_, addrs_,
+        std::bind(&Perfect::receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
+    ), app_send(app_send), app_receive(app_receive) {}
 
     void bind_address(sockaddr_in* address) {
       st.bind_address(address);
     }
 
-    void run(std::function<bool()> send_callback, std::function<void(unsigned char, char*)> receive_callback) {
-      std::thread send(&Perfect::new_messages, this, send_callback);
-      send.detach();
-      std::thread work1([&]{ st.send_messages(); });
-      work1.detach();
-      std::thread work2([&]{ st.send_acks(); });
-      work2.detach();
-      std::thread listen(&Perfect::listen, this);
-      listen.detach();
-      std::thread receiving([this, receive_callback]{ // capture by value not reference, other
-        auto fun = std::bind(&Perfect::receive, this, receive_callback,
-          std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-        this->st.receive(fun);
-      });
-      receiving.detach();
+    void enqueueWorker() {
+      bool done = app_send();
+      while (!done) {
+        st.await_ready_for_more();
+        done = app_send();
+      }
+      if (OO >= 1) std::cout << "done sending" << std::endl;
+    }
+    
+    void sendWorker() {
+      st.sendWorker();
+    }
+    
+    void ackWorker() {
+      st.ackWorker();
+    }
+    
+    void receiveWorker() {
+      st.receiveWorker();
     }
 
     void stats() {
@@ -40,15 +52,6 @@ class Perfect {
       st.stats();
       last_sent = sent;
       last_recv = recv;
-    }
-
-    void new_messages(std::function<bool()> callback) {
-      bool done = callback();
-      while (!done) {
-        st.await_ready_for_more();
-        done = callback();
-      }
-      if (OO >= 1) std::cout << "done sending" << std::endl;
     }
 
     void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
@@ -60,7 +63,7 @@ class Perfect {
       st.listen();
     }
 
-    void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
+    void receive(unsigned char sender, char* msg, char* end) {
       // receives message formatted as
       // seq_nr | seq_nr | seq_nr ...
       recv++;
@@ -82,7 +85,7 @@ class Perfect {
             << ": " << sub_msg << std::endl;
 
         // receive callback
-        callback(sender, sub_msg);
+        app_receive(sender, sub_msg);
 
         if (end != sep)
           sep++;
@@ -91,6 +94,8 @@ class Perfect {
 
   private:
     Stubborn st;
+    std::function<bool()> app_send;
+    std::function<void(unsigned char, char*)> app_receive;
     unsigned int sent = 0;
     unsigned int recv = 0;
 

@@ -40,8 +40,12 @@ struct StubbornMsg {
 
 class Stubborn {
   public:
-    Stubborn(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_)
-    : id(id_), addrs(addrs_) {
+    Stubborn(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
+      std::function<void(unsigned char, char*, char*)> app_receive
+    )
+    : id(id_), addrs(addrs_), 
+      fl(FairLoss(std::bind(&Stubborn::receive, this, std::placeholders::_1, std::placeholders::_2))),
+      app_receive(app_receive) {
       for (auto& [sender, _]: *addrs) {
         if (sender == id) continue;
         pending_acks.try_emplace(sender); // constructs default IT inplace
@@ -74,7 +78,7 @@ class Stubborn {
       cv_empty.notify_one();
     }
 
-    void send_messages() {
+    void sendWorker() {
       if (OO >= 1) std::cout << "running stubborn" << std::endl;
       while (true) {
         next();
@@ -147,39 +151,28 @@ class Stubborn {
       fl.bind_address(address);
     }
 
-    void receive(std::function<void(unsigned char, char*, char*)> receive_callback) {
-      if (OO >= 1) std::cout << "stubborn receiving..." << std::endl;
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      
-      while (true) {
-        std::pair<ssize_t, char*> pair;
-        bool succeeded = fl.msg_queue.try_dequeue(pair);
-        if (!succeeded) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(10));
-          if (OO >= 3) std::cout << "sleep in receive" << std::endl;
-          continue;
-        }
-        char* buffer = pair.second;
-        ssize_t msg_len = pair.first;
+    void receiveWorker() {
+      fl.receiveWorker();
+    }
 
-        if (OO >= 3) std::cout << "st got smth" << std::endl;
-        recv++;
-        char* end = buffer + msg_len;
-        unsigned char sender = static_cast<unsigned char>(*buffer - '0');
-        
-        char second = *(buffer + 1);
-        if (second == 6) {
-          // ack
-          char third = *(buffer + 2);
-          if (third == 6) {
-            // ackack
-            receive_ackack(sender, buffer+3, end);
-          } else {
-            receive_ack(sender, buffer+2, end);
-          }
+    void receive(char* buffer, ssize_t msg_len) {
+      if (OO >= 3) std::cout << "st got smth" << std::endl;
+      recv++;
+      char* end = buffer + msg_len;
+      unsigned char sender = static_cast<unsigned char>(*buffer - '0');
+      
+      char second = *(buffer + 1);
+      if (second == 6) {
+        // ack
+        char third = *(buffer + 2);
+        if (third == 6) {
+          // ackack
+          receive_ackack(sender, buffer+3, end);
         } else {
-          receive_msg(receive_callback, sender, buffer+1, end);
+          receive_ack(sender, buffer+2, end);
         }
+      } else {
+        receive_msg(sender, buffer+1, end);
       }
     }
 
@@ -187,7 +180,7 @@ class Stubborn {
       return (static_cast<unsigned long>(sender) << 32) | msg_id;
     }
 
-    void receive_msg(std::function<void(unsigned char, char*, char*)> callback, unsigned char sender, char* buffer, char* end) {
+    void receive_msg(unsigned char sender, char* buffer, char* end) {
       r_msg++;
       char* msg = nullptr;
       unsigned int msg_id = static_cast<unsigned int>(strtoul(buffer, &msg, 16));
@@ -206,7 +199,7 @@ class Stubborn {
       if (lookup.find(hash) == lookup.end()) {
         lookup.emplace(hash);
         add_to_ack(sender, msg_id);
-        callback(sender, msg, end);
+        app_receive(sender, msg, end);
       }
     }
 
@@ -216,7 +209,7 @@ class Stubborn {
         std::cerr << "ack insertion failed: " << msg_id << " on sender " << static_cast<short>(sender) << std::endl;
     }
 
-    void send_acks() {
+    void ackWorker() {
       if (OO >= 1) std::cout << "running acks in stubborn" << std::endl;
       while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(ACK_INTERVAL_MILLIS));
@@ -347,7 +340,9 @@ class Stubborn {
 
   private:
     unsigned char id;
+    std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
     FairLoss fl;
+    std::function<void(unsigned char, char*, char*)> app_receive;
     std::unordered_set<unsigned long> lookup{};
     std::set<StubbornMsg> Q;
     std::unordered_set<unsigned int> acked; // could be interval tree but idk since single removal
@@ -359,7 +354,6 @@ class Stubborn {
     std::condition_variable cv_ready;
     std::condition_variable cv_empty;
     std::condition_variable cv_acks;
-    std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
     std::unordered_map<unsigned char, IntervalTree> pending_acks;
     std::unordered_map<unsigned char, unsigned long> cutoffs;
 

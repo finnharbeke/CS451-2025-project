@@ -22,7 +22,11 @@ class Process
 public:
   Process(unsigned long id_, unsigned long dest_id, unsigned long m_, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
-      : addrs(addrs_), id(static_cast<unsigned char>(id_)), network(Perfect(id, addrs))
+      : addrs(addrs_), id(static_cast<unsigned char>(id_)),
+      network(Perfect(id, addrs,
+        std::bind(&Process::send_batch, this),
+        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2)
+      ))
   {
 
     if (OO >= 1)
@@ -42,10 +46,16 @@ public:
 
   void main()
   {
-    auto send = std::bind(&Process::send_batch, this);
-    auto receive = std::bind(&Process::log_receive, this,
-                             std::placeholders::_1, std::placeholders::_2);
-    network.run(send, receive);
+    std::thread ew([&]{ network.enqueueWorker(); });
+    ew.detach();
+    std::thread sw([&]{ network.sendWorker(); });
+    sw.detach();
+    std::thread aw([&]{ network.ackWorker(); });
+    aw.detach();
+    std::thread rw([&]{ network.receiveWorker(); });
+    rw.detach();
+    std::thread l([&]{ network.listen(); });
+    l.detach();
 
     if (STATS)
     {
@@ -112,8 +122,6 @@ public:
 
   bool send_batch()
   {
-    if (seq_nr > m)
-      return true;
     if (OO >= 2)
       std::cout << "keeping sending from" << seq_nr << std::endl;
     // only send (MAX_PENDING >> 1) new messages
@@ -147,7 +155,7 @@ public:
       std::cout << "sent until" << seq_nr - 1 << std::endl;
     if (OO >= 1 && seq_nr > m)
       std::cout << "process " << static_cast<short>(id) << " done sending." << std::endl;
-    return false;
+    return seq_nr > m;
   }
 
   void check_buffer()

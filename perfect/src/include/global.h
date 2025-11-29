@@ -8,7 +8,7 @@
 // 2 - crucial msg triggers: stubborn receives & sends
 // 3 - other msg triggers
 // 4 - msg contents
-const unsigned char OO = 0;
+const unsigned char OO = 1;
 const bool STATS = 1;
 
 const unsigned long LOGBUFSIZE = 1 << 18; // 1/4 MiB, so for 128 proc, 32 MiB
