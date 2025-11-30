@@ -56,6 +56,8 @@ public:
     rw.detach();
     std::thread l([&]{ network.listen(); });
     l.detach();
+    std::thread hb([&]{ network.heartbeats(); });
+    hb.detach();
 
     if (STATS)
     {
@@ -184,6 +186,10 @@ public:
       }
       recv_buffer.clear();
     }
+  }
+
+  void contin() {
+    network.contin();
   }
 
 private:

@@ -146,4 +146,13 @@ namespace codec
         return v;
     }
 
+    char* make_heartbeat(unsigned char id);
+    char* make_heartbeat(unsigned char id) {
+        char* b = static_cast<char*>(malloc(HEARTBEAT_LEN));
+        *b = static_cast<char>(id + '0');
+        *(b+1) = '&'; // ampersand for life
+        *(b+2) = '\0';
+        return b;
+    }
+
 }

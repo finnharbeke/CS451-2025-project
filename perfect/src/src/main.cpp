@@ -11,7 +11,6 @@
 
 #include "process.cpp"
 #include "config.cpp"
-#include "fairloss.cpp"
 
 Process* proc;
 
@@ -33,6 +32,18 @@ static void stop(int) {
 
   // exit directly from signal handler
   exit(0);
+}
+
+// SIGCONT handler: repair state after STOP
+void handle_sigcont(int);
+void handle_sigcont(int) {
+    std::cerr << "[resume] SIGCONT received, repairing state\n";
+
+    resumed_flag.store(true);
+    
+    // continue
+    proc->contin();
+    resumed_flag.store(false);
 }
 
 int main(int argc, char **argv) {

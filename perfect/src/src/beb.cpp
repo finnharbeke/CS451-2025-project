@@ -41,6 +41,10 @@ class BEB {
     void receiveWorker() {
       pf.receiveWorker();
     }
+    
+    void heartbeats() {
+      pf.heartbeats();
+    }
 
     void stats() {
       std::cout << sent - last_sent << "," << recv - last_recv << ",";
@@ -72,6 +76,10 @@ class BEB {
         // accessed by both send and receive thread
         app_receive(sender, msg, end);
         recv++;
+    }
+
+    void contin() {
+        pf.contin();
     }
 
   private:

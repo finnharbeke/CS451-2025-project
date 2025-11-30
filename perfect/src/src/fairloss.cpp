@@ -95,6 +95,10 @@ class FairLoss {
       }
     }
 
+    void contin() {
+    }
+
+
   private:
     moodycamel::ReaderWriterQueue<std::pair<char*, ssize_t>> msg_queue;
     std::function<void(char*, ssize_t)> app_receive;

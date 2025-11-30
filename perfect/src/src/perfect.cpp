@@ -40,6 +40,10 @@ class Perfect {
     void receiveWorker() {
       st.receiveWorker();
     }
+    
+    void heartbeats() {
+      st.heartbeats();
+    }
 
     void stats() {
       std::cout << sent - last_sent << "," << recv - last_recv << ",";
@@ -60,6 +64,10 @@ class Perfect {
     void receive(unsigned char sender, char* msg, char* end) {
       recv++;
       app_receive(sender, msg, end);
+    }
+
+    void contin() {
+      st.contin();
     }
 
   private:

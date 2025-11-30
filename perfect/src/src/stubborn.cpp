@@ -52,6 +52,10 @@ class Stubborn {
         acked.try_emplace(sender);
         ackedset_mutxs.try_emplace(sender);
         cutoffs[sender] = 0;
+        
+        suspected[sender] = false;
+        last_seen[sender] = std::chrono::steady_clock::now();
+        suspended.try_emplace(sender);
       }
     }
 
@@ -104,7 +108,10 @@ class Stubborn {
       std::chrono::system_clock::time_point until;
       {
         std::unique_lock<std::mutex> lock(Q_mutx);
-        cv_empty.wait(lock, [&]{ return !Q.empty(); });
+        cv_empty.wait(lock, [&]{
+          if (resumed_flag.load()) return true;   // break wait after SIGCONT
+          return !Q.empty();
+        });
         until = (*Q.begin()).next_send;
       }
 
@@ -117,27 +124,40 @@ class Stubborn {
         auto top = Q.begin();
         stbmsg = *top;
         Q.erase(top);
-        std::chrono::system_clock::time_point now;
-        {
-          now = std::chrono::system_clock::now();
-          std::unique_lock<std::mutex> lock(ackedset_mutxs[stbmsg.dest]);
-          auto it = acked[stbmsg.dest].find(stbmsg.msg_id);
-          if (it != acked[stbmsg.dest].end()) {
-          // old message, throw out
-            acked[stbmsg.dest].erase(it);
-            stbmsg.free_msg();
-            cv_ready.notify_one(); // Q size decreased
-            return;
-          }
+      }
+      {
+        std::lock_guard lock(hb_mutx);
+        if (suspected[stbmsg.dest]) {
+          // go away
+          suspended[stbmsg.dest].push_back(stbmsg);
+          cv_ready.notify_one();
+          return;
         }
-        
-        // adjust timestamp
-        codec::add_timestamp(stbmsg.msg, now);
+      }
 
-        stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
-        if (stbmsg.back_off < MAX_BACKOFF)
-          stbmsg.back_off++;
-  
+      std::chrono::system_clock::time_point now;
+      {
+        now = std::chrono::system_clock::now();
+        std::unique_lock<std::mutex> lock(ackedset_mutxs[stbmsg.dest]);
+        auto it = acked[stbmsg.dest].find(stbmsg.msg_id);
+        if (it != acked[stbmsg.dest].end()) {
+        // old message, throw out
+          acked[stbmsg.dest].erase(it);
+          stbmsg.free_msg();
+          cv_ready.notify_one(); // Q size decreased
+          return;
+        }
+      }
+      
+      // adjust timestamp
+      codec::add_timestamp(stbmsg.msg, now);
+
+      stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
+      if (stbmsg.back_off < MAX_BACKOFF)
+        stbmsg.back_off++;
+
+      {
+        std::unique_lock<std::mutex> lock(Q_mutx);
         Q.insert(stbmsg);
       }
       if (OO >= 2) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
@@ -148,8 +168,8 @@ class Stubborn {
 
     void await_ready_for_more() {
       std::unique_lock<std::mutex> lock(Q_mutx);
-      cv_ready.wait(lock, [&](){
-        // std::cout << "checking " << Q.size() << std::endl;
+      cv_ready.wait(lock, [&]{
+        if (resumed_flag.load()) return true;   // break wait after SIGCONT
         return Q.size() < REFILL;
       });
     }
@@ -177,6 +197,18 @@ class Stubborn {
           receive_ackack(sender, buffer+3, end);
         } else {
           receive_ack(sender, buffer+2, end);
+        }
+      } else if (second == '&') {
+        {
+          std::lock_guard lock(hb_mutx);
+          last_seen[sender] = std::chrono::steady_clock::now();
+          if (OO >= 1)
+            std::cout << "process " << static_cast<short>(sender) << " alive!" << std::endl;
+          if (suspected[sender] == true) {
+            if (OO >= 1)
+              std::cout << static_cast<short>(sender) << " came back from the dead" << std::endl;
+            unsuspect(sender);
+          }
         }
       } else {
         receive_msg(sender, buffer+1, end);
@@ -225,6 +257,11 @@ class Stubborn {
         std::this_thread::sleep_for(std::chrono::milliseconds(ACK_INTERVAL_MILLIS));
 
         for (auto& [sender, tree] : pending_acks) {
+          {
+            std::lock_guard lock(hb_mutx);
+            if (suspected[sender])
+              continue;
+          }
           sockaddr_in* dest = &(*addrs)[sender];
           // lock for erases
           auto view = tree.readView();
@@ -345,6 +382,49 @@ class Stubborn {
       fl.listen();
     }
 
+    void heartbeats() {
+      char* hb = codec::make_heartbeat(id);  // trivial 3–4 byte msg
+      std::chrono::steady_clock::time_point now;  // trivial 3–4 byte msg
+      while (true) {
+        now = std::chrono::steady_clock::now();
+        {
+          std::lock_guard lock(hb_mutx);
+          for (auto& [p, dest] : *addrs) {
+            if (suspected[p])
+              continue;
+            if (now - last_seen[p] > std::chrono::milliseconds(SUSPECT * HEARTBEAT_MS)) {
+              suspected[p] = true;
+              if (OO >= 1)
+                std::cout << "suspecting " << static_cast<short>(p) << std::endl;
+            }
+          }
+        }
+        for (auto& [p, dest] : *addrs) {
+          fl.send(hb, &dest);
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEAT_MS));
+      }
+    }
+
+
+    void unsuspect(unsigned char p) { // has hb_mutx
+      suspected[p] = false;
+      std::lock_guard<std::mutex> lock(Q_mutx);
+
+      for (auto& msg : suspended[p]) {
+        Q.insert(msg);   // reinsert scheduled retransmissions
+      }
+      suspended[p].clear();
+
+      cv_empty.notify_one();
+    }
+
+    void contin() {
+      fl.contin();
+    }
+
+
   private:
     unsigned char id;
     std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
@@ -363,6 +443,12 @@ class Stubborn {
     std::condition_variable cv_empty;
     std::unordered_map<unsigned char, IntervalTree> pending_acks;
     std::unordered_map<unsigned char, unsigned long> cutoffs;
+
+    std::unordered_map<unsigned char, bool> suspected;
+    std::unordered_map<unsigned char, std::chrono::steady_clock::time_point> last_seen;
+    std::mutex hb_mutx;
+
+    std::unordered_map<unsigned char, std::vector<StubbornMsg>> suspended;
 
     unsigned long send_cycles = 0;
     unsigned long sent = 0;

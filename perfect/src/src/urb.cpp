@@ -54,6 +54,10 @@ class URB {
     void receiveWorker() {
         beb.receiveWorker();
     }
+    
+    void heartbeats() {
+        beb.heartbeats();
+    }
 
     void stats() {
         std::cout << sent - last_sent << "," << recv - last_recv << ",";
@@ -84,7 +88,7 @@ class URB {
         unsigned int msg_id = static_cast<unsigned int>(strtoul(ptr+1, &ptr, 16));
         ptr++;
         if (OO >= 2)
-            std::cout << "urb_ " << static_cast<short>(sender) << "-" << msg_id << std::endl;
+            std::cout << "urb_r " << static_cast<short>(sender) << "-" << msg_id << std::endl;
 
         if (ack[sender].find(msg_id) == ack[sender].end()) {
             ack[sender][msg_id] = 0;
@@ -105,6 +109,10 @@ class URB {
             app_receive(sender, ptr, end);
         }
         recv++;
+    }
+
+    void contin() {
+        beb.contin();
     }
 
   private:
