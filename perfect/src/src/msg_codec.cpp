@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <chrono>
 #include <stdexcept>
+#include <vector>
 
 namespace codec
 {
@@ -51,6 +52,29 @@ namespace codec
         *ptr = 0;
 
         return buffer;
+    }
+
+    std::vector<unsigned int> recover_seqnrs(char* msg, char* end);
+    std::vector<unsigned int> recover_seqnrs(char* msg, char* end) {
+        std::vector<unsigned int> v;
+        char* sep = msg;
+        if (OO >= 4)
+            std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
+        while (sep != end) {
+            if (OO >= 4)
+            std::cout << "rest buffer " << sep << std::endl;
+            
+            unsigned int seq_nr = static_cast<unsigned int>(strtoul(sep, nullptr, 16));
+            v.push_back(seq_nr);
+            
+            sep = std::find(sep, end, static_cast<char>(31));
+            // end sub_msg (instead of unit separator 31)
+            if (end != sep) {
+                *sep = '\0';
+                sep++;
+            }
+        }
+        return v;
     }
 
 }

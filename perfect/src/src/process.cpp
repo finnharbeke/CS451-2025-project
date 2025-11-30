@@ -13,32 +13,32 @@
 
 
 #include "global.h"
-#include "perfect.cpp"
+#include "beb.cpp"
 #include "ram.cpp"
 #include "msg_codec.cpp"
 
 class Process
 {
 public:
-  Process(unsigned long id_, unsigned long dest_id, unsigned long m_, const char *outputPath,
+  Process(unsigned long id_, unsigned char n, unsigned long m_, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
       : addrs(addrs_), id(static_cast<unsigned char>(id_)),
-      network(Perfect(id, addrs,
+      network(BEB(id, n, addrs,
         std::bind(&Process::send_batch, this),
-        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2)
+        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
       ))
   {
 
     if (OO >= 1)
       std::cout << "setting up process with id " << id_ << std::endl;
 
-    dest = static_cast<unsigned char>(dest_id); // by assumptions at most 128
     m = static_cast<unsigned int>(m_);          // by assumptions at most 2^31-1
     network.bind_address(&(*addrs)[id]);
 
     // logs
     out.open(outputPath);
-    buffer.reserve(LOGBUFSIZE);
+    send_buffer.reserve(LOGBUFSIZE);
+    recv_buffer.reserve(LOGBUFSIZE);
 
     if (OO >= 1)
       std::cout << "set up process " << static_cast<short>(id) << std::endl;
@@ -68,9 +68,12 @@ public:
   {
     if (OO >= 1)
       std::cout << "closing" << std::endl;
-    out << buffer;
-    out.flush();
-    out.close();
+    {
+      std::lock_guard lock(outmutx);
+      out << send_buffer << recv_buffer;
+      out.flush();
+      out.close();
+    }
   }
 
   void keep_stats()
@@ -106,18 +109,22 @@ public:
     last_log_r = log_r;
   }
 
-  void log_receive(unsigned char from, char *msg)
+  void log_receive(unsigned char from, char *msg, char* end)
   {
-    unsigned int seq_nr = static_cast<unsigned int>(strtoul(msg, nullptr, 16));
-    if (OO >= 3)
-      std::cout << "logging " << seq_nr << " from " << static_cast<short>(from) << std::endl;
-    buffer += "d ";
-    buffer += std::to_string(static_cast<short>(from));
-    buffer += " ";
-    buffer += std::to_string(seq_nr);
-    buffer += "\n";
-    log_r++;
-    check_buffer();
+    // receives message formatted as
+    // seq_nr | seq_nr | seq_nr ...
+    auto seq_nrs = codec::recover_seqnrs(msg, end);
+    for (auto seq_nr : seq_nrs) {
+      if (OO >= 3)
+        std::cout << "logging " << seq_nr << " from " << static_cast<short>(from) << std::endl;
+      recv_buffer += "d ";
+      recv_buffer += std::to_string(static_cast<short>(from));
+      recv_buffer += " ";
+      recv_buffer += std::to_string(seq_nr);
+      recv_buffer += "\n";
+      log_r++;
+    }
+    check_recv_buffer();
   }
 
   bool send_batch()
@@ -137,18 +144,18 @@ public:
       char *msg = codec::compose_batch(id, msg_count, k, seq_nr);
       if (OO >= 4)
         std::cout << "composed " << msg << std::endl;
-      network.send(msg_count++, msg, &(*addrs)[dest]);
+      network.send(msg_count++, msg);
 
       for (unsigned char j = 0; j < k; j++)
       {
         if (OO >= 3)
           std::cout << "logging " << static_cast<short>(seq_nr) << std::endl;
-        buffer += "b ";
-        buffer += std::to_string(seq_nr);
-        buffer += "\n";
+        send_buffer += "b ";
+        send_buffer += std::to_string(seq_nr);
+        send_buffer += "\n";
         seq_nr++;
       }
-      check_buffer();
+      check_send_buffer();
 
       if (seq_nr > m)
         break;
@@ -160,24 +167,38 @@ public:
     return seq_nr > m;
   }
 
-  void check_buffer()
+  void check_send_buffer()
   {
-    if (buffer.size() >= LOG_CAP) {
-      out << buffer;
-      buffer.clear();
+    if (send_buffer.size() >= LOG_CAP) {
+      {
+        std::lock_guard lock(outmutx);
+        out << send_buffer;
+      }
+      send_buffer.clear();
+    }
+  }
+  void check_recv_buffer()
+  {
+    if (recv_buffer.size() >= LOG_CAP) {
+      {
+        std::lock_guard lock(outmutx);
+        out << recv_buffer;
+      }
+      recv_buffer.clear();
     }
   }
 
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
-  Perfect network;
-  unsigned char dest;
+  BEB network;
   unsigned int m = 0;
   unsigned int seq_nr = 1;
   unsigned int msg_count = 1;
   unsigned int log_r = 0;
-  std::string buffer;
+  std::string send_buffer;
+  std::string recv_buffer;
+  std::mutex outmutx;
   std::ofstream out;
 
   const std::clock_t c_start = std::clock();

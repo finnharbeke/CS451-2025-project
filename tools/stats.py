@@ -10,7 +10,7 @@ def collect(n, m, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,fl_s,fl_r,fl_rq,msgs_in_q\n"
+            "pid,round,cpu,wc,ram,m_cmpsd,seq_nr,log_r,beb_s,beb_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,fl_s,fl_r,fl_rq,msgs_in_q\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -30,59 +30,33 @@ if __name__ == "__main__":
     out_dir = os.path.dirname(out_path)
     df = pd.read_csv(out_path)
 
-    df['is_r'] = df['pid'] == 1
     # cutoff = df[(~df['is_r']) & (df['m_cmpsd'] == 0)]['round'].min()
     # print(cutoff)
     # df.drop(index=df[df['round'] >= cutoff].index, inplace=True)
-    
-    gb = df.groupby(by=['round', 'is_r']).agg('sum')
-    iterator = gb.iterrows()
-    ((r, _), senders) = next(iterator)
 
-    rows = []
+    df['aa_r'] = df['aas'] / df['aar']
+    df['ack_r'] = df['ack_s'] / df['ack_r']
+    df['fl_r'] = df['fl_s'] / df['fl_r']
+    df['fl_rq'] = df['fl_s'] / df['fl_rq']
 
-    while True:
-        try:
-            (_, recv) = next(iterator)
-        except StopIteration:
-            break
-
-        rows.append(dict(
-            round=r,
-            aa_r=senders['aas'] / recv['aar'],
-            ack_r=recv['ack_s'] / senders['ack_r'],
-            fl_f_r=senders['fl_s'] / recv['fl_r'],
-            fl_f_rq=senders['fl_s'] / recv['fl_rq'],
-            fl_b_r=recv['fl_s'] / senders['fl_r'],
-        ))
-        try:
-            ((r, _), senders) = next(iterator)
-        except StopIteration:
-            break
-
-
-    s_vs_r = pd.DataFrame(rows)
-
-    sns.lineplot(data=s_vs_r, x='round', y='fl_f_r', label='FL forward SR ratio', palette=sns.color_palette('Set2'))
-    sns.lineplot(data=s_vs_r, x='round', y='fl_f_rq', label='FL forward SR ratio Q', palette=sns.color_palette('Set2'))
-    sns.lineplot(data=s_vs_r, x='round', y='fl_b_r', label='FL backward SR ratio', palette=sns.color_palette('Set2'))
-    sns.lineplot(data=s_vs_r, x='round', y='ack_r', label='Ack SR ratio', palette=sns.color_palette('Set2'))
-    sns.lineplot(data=s_vs_r, x='round', y='aa_r', label='AckAck SR ratio', palette=sns.color_palette('Set2'))
-    flf = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_f_r'].mean()
-    flfq = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_f_rq'].mean()
-    flb = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['fl_b_r'].mean()
-    a = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['ack_r'].mean()
-    aa = s_vs_r[s_vs_r['round'] <= s_vs_r['round'].max()/2]['aa_r'].mean()
-    plt.title(f'FLF {flf:02.2f}, FLFQ {flfq:02.2f}, FLB {flb:02.2f}, Ack {a:02.2f}, AckAck {aa:02.2f}')
+    sns.lineplot(data=df, x='round', y='fl_r', label='FL SR ratio', palette=sns.color_palette('Set2'))
+    sns.lineplot(data=df, x='round', y='fl_rq', label='FL SR ratio Q', palette=sns.color_palette('Set2'))
+    sns.lineplot(data=df, x='round', y='ack_r', label='Ack SR ratio', palette=sns.color_palette('Set2'))
+    sns.lineplot(data=df, x='round', y='aa_r', label='AckAck SR ratio', palette=sns.color_palette('Set2'))
+    flf = df[df['round'] <= df['round'].max()/2]['fl_r'].mean()
+    flfq = df[df['round'] <= df['round'].max()/2]['fl_rq'].mean()
+    a = df[df['round'] <= df['round'].max()/2]['ack_r'].mean()
+    aa = df[df['round'] <= df['round'].max()/2]['aa_r'].mean()
+    plt.title(f'FLF {flf:02.2f}, FLFQ {flfq:02.2f}, Ack {a:02.2f}, AckAck {aa:02.2f}')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-ratios.png'))
     plt.clf()
     
     df['send_r'] = df['pf_s'] / df['sent']
     df['recv_r'] = df['pf_r'] / df['recv']
-    sns.lineplot(data=df[~df['is_r']], x='round', y='send_r', label='Perf / Stub Send Ratio')
-    sns.lineplot(data=df[df['is_r']], x='round', y='recv_r', label='Perf / Stub Recv Ratio (dupes)')
-    s_r_mean = df[(~df['is_r']) & (df['round'] <= df['round'].max()/2)]['send_r'].mean()
-    r_r_mean = df[df['is_r'] & (df['round'] <= df['round'].max()/2)]['recv_r'].mean()
+    sns.lineplot(data=df, x='round', y='send_r', label='Perf / Stub Send Ratio')
+    sns.lineplot(data=df, x='round', y='recv_r', label='Perf / Stub Recv Ratio (dupes)')
+    s_r_mean = df[df['round'] <= df['round'].max()/2]['send_r'].mean()
+    r_r_mean = df[df['round'] <= df['round'].max()/2]['recv_r'].mean()
     plt.title(f'S Mean: {s_r_mean:02.2f}, R Mean: {r_r_mean:02.2f}')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-PS.png'))
     plt.clf()
@@ -95,10 +69,10 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-RAM.png'))
     plt.clf()
 
-    r_log_mean = df[df['is_r'] & (df['round'] <= df['round'].max()/2)]['log_r'].mean()
-    s_log_mean = df[(~df['is_r']) & (df['round'] <= df['round'].max()/2)]['seq_nr'].mean()
-    df['log'] = df['log_r'] + df['seq_nr']
-    sns.lineplot(data=df, x='wc', hue='pid', y='log')
+    r_log_mean = df[df['round'] <= df['round'].max()/2]['log_r'].mean()
+    s_log_mean = df[df['round'] <= df['round'].max()/2]['seq_nr'].mean()
+    sns.lineplot(data=df, x='round', y='log_r')
+    sns.lineplot(data=df, x='round', y='seq_nr')
     plt.title(f'R Mean: {r_log_mean:.0f}, S Mean: {s_log_mean:.0f}')
     plt.savefig(os.path.join(out_dir, f'{n}-{m}-LOGS.png'))
 
