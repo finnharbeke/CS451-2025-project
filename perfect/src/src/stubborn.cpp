@@ -17,15 +17,16 @@
 
 #include "global.h"
 #include "fairloss.cpp"
+#include "msg_codec.cpp"
 #include "interval_tree.cpp"
 
 struct StubbornMsg {
-  unsigned int msg_id;
+  unsigned long msg_id;
   char* msg;
   unsigned char dest;
   std::chrono::system_clock::time_point next_send;
   unsigned char back_off = INIT_BACKOFF;
-  StubbornMsg(unsigned int msg_id, char* msg, unsigned char dest) :
+  StubbornMsg(unsigned long msg_id, char* msg, unsigned char dest) :
     msg_id(msg_id), msg(msg), dest(dest),
     next_send(std::chrono::system_clock::now()) {}
 
@@ -84,7 +85,7 @@ class Stubborn {
       fl.stats();
     }
 
-    void send(unsigned int msg_id, char* msg, unsigned char dest) {
+    void send(unsigned long msg_id, char* msg, unsigned char dest) {
       std::lock_guard<std::mutex> lock(Q_mutx);
       Q.emplace(msg_id, msg, dest);
       cv_empty.notify_one();
@@ -131,13 +132,7 @@ class Stubborn {
         }
         
         // adjust timestamp
-        auto ptr = stbmsg.msg;
-        while (*ptr != 31)
-          ptr++;
-        ptr++;
-        int written = snprintf(ptr, _TIME_S+1, "%.16lx", now.time_since_epoch().count());
-        ptr += written;
-        *ptr = 31;
+        codec::add_timestamp(stbmsg.msg, now);
 
         stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
         if (stbmsg.back_off < MAX_BACKOFF)
@@ -188,15 +183,18 @@ class Stubborn {
       }
     }
 
-    static unsigned long hash_msg(unsigned char sender, unsigned int msg_id) {
-      return (static_cast<unsigned long>(sender) << 32) | msg_id;
+    static unsigned long hash_msg(unsigned char sender, unsigned long msg_id) {
+      // 128 = 2^7 processes
+      // msg_id is at most 2^37
+      return (static_cast<unsigned long>(sender) << 40) | msg_id;
     }
 
     void receive_msg(unsigned char sender, char* buffer, char* end) {
       r_msg++;
       char* msg = nullptr;
-      unsigned int msg_id = static_cast<unsigned int>(strtoul(buffer, &msg, 16));
+      unsigned long msg_id = strtoul(buffer, &msg, 16);
       msg++;
+
       unsigned long timestamp_ul = strtoul(msg, &msg, 16);
       // std::cout << msg_id << " " << timestamp_ul << std::endl;
       msg++;
@@ -215,7 +213,7 @@ class Stubborn {
       }
     }
 
-    void add_to_ack(unsigned char sender, unsigned int msg_id) {
+    void add_to_ack(unsigned char sender, unsigned long msg_id) {
       // std::lock_guard<std::mutex> lock(ack_mutx);
       if (!pending_acks[sender].insert(msg_id) && OO >= 1)
         std::cerr << "ack insertion failed: " << msg_id << " on sender " << static_cast<short>(sender) << std::endl;
@@ -247,7 +245,7 @@ class Stubborn {
 
     char* compose_ack(unsigned char sender, Interval inter) {
       if (OO >= 3)
-        std::cout << "composing ack to " << static_cast<int>(sender)
+        std::cout << "composing ack to " << static_cast<short>(sender)
         << ", [" << inter.left << "," << inter.right << "]" << std::endl;
       
       char* buffer = static_cast<char*>(malloc(ACK_LEN));
@@ -259,12 +257,12 @@ class Stubborn {
       *ptr = 6; // ack
       ++ptr;
 
-      int written = snprintf(ptr, _CMPRSD_S+1, "%x", inter.left);
+      int written = snprintf(ptr, _ID_S+1, "%lx", inter.left);
       ptr += written;
       *ptr = 31; // ascii unit separator
       ++ptr;
 
-      snprintf(ptr, _CMPRSD_S+1, "%x", inter.right);
+      snprintf(ptr, _ID_S+1, "%lx", inter.right);
       
       return buffer;
     }
@@ -275,9 +273,9 @@ class Stubborn {
       char* sep = msg;
       
       // TODO could just copy msg to ptr...
-      unsigned int left = static_cast<unsigned int>(strtoul(sep, &sep, 16));
+      unsigned long left = strtoul(sep, &sep, 16);
       sep++;
-      unsigned int right = static_cast<unsigned int>(strtoul(sep, &sep, 16));
+      unsigned long right = strtoul(sep, &sep, 16);
       
       if (OO >= 1)
       std::cout << "st_r_a " << static_cast<short>(sender) << ": ["
@@ -311,11 +309,11 @@ class Stubborn {
       ptr += written;
       *ptr = 31; // ascii unit separator
       ++ptr;
-      written = snprintf(ptr, _CMPRSD_S+1, "%x", left);
+      written = snprintf(ptr, _ID_S+1, "%lx", left);
       ptr += written;
       *ptr = 31; // ascii unit separator
       ++ptr;
-      snprintf(ptr, _CMPRSD_S+1, "%x", right);
+      snprintf(ptr, _ID_S+1, "%lx", right);
       fl.send(buffer, &(*addrs)[sender]); // TODO check if multithreaded sending needs checks
       free(buffer);
 
@@ -328,9 +326,9 @@ class Stubborn {
       unsigned long cutoff = strtoul(head, &head, 16);
       head++;
       cutoffs[sender] = cutoff;
-      unsigned int left = static_cast<unsigned int>(strtoul(head, &head, 16));
+      unsigned long left = strtoul(head, &head, 16);
       head++;
-      unsigned int right = static_cast<unsigned int>(strtoul(head, nullptr, 16));
+      unsigned long right = strtoul(head, nullptr, 16);
       if (OO >= 1)
         std::cout << "st_r_aa " << static_cast<short>(sender) << ": ["
           << left << "," << right << "]" << std::endl;
@@ -355,10 +353,10 @@ class Stubborn {
     std::unordered_set<unsigned long> lookup{};
     std::multiset<StubbornMsg> Q;
     // could be interval tree but idk since single removal
-    std::unordered_map<unsigned char, std::unordered_set<unsigned int>> acked;
+    std::unordered_map<unsigned char, std::unordered_set<unsigned long>> acked;
     std::unordered_map<unsigned char, std::mutex> ackedset_mutxs;
     // std::queue<StubbornMsg*> Q;
-    // std::unordered_map<unsigned int, StubbornMsg*> msg_index;
+    // std::unordered_map<unsigned long, StubbornMsg*> msg_index;
     std::mutex Q_mutx;
     // std::mutex ack_mutx;
     std::condition_variable cv_ready;
@@ -366,22 +364,22 @@ class Stubborn {
     std::unordered_map<unsigned char, IntervalTree> pending_acks;
     std::unordered_map<unsigned char, unsigned long> cutoffs;
 
-    unsigned int send_cycles = 0;
-    unsigned int sent = 0;
-    unsigned int ack_cycles = 0;
-    unsigned int s_ack = 0;
-    unsigned int s_ackack = 0;
-    unsigned int recv = 0;
-    unsigned int r_msg = 0;
-    unsigned int r_ack = 0;
-    unsigned int r_ackack = 0;
-    unsigned int last_sent = 0;
-    unsigned int last_send_cycles = 0;
-    unsigned int last_s_ack = 0;
-    unsigned int last_r_ack = 0;
-    unsigned int last_ack_cycles = 0;
-    unsigned int last_r_msg = 0;
-    unsigned int last_recv = 0;
-    unsigned int last_s_ackack = 0;
-    unsigned int last_r_ackack = 0;
+    unsigned long send_cycles = 0;
+    unsigned long sent = 0;
+    unsigned long ack_cycles = 0;
+    unsigned long s_ack = 0;
+    unsigned long s_ackack = 0;
+    unsigned long recv = 0;
+    unsigned long r_msg = 0;
+    unsigned long r_ack = 0;
+    unsigned long r_ackack = 0;
+    unsigned long last_sent = 0;
+    unsigned long last_send_cycles = 0;
+    unsigned long last_s_ack = 0;
+    unsigned long last_r_ack = 0;
+    unsigned long last_ack_cycles = 0;
+    unsigned long last_r_msg = 0;
+    unsigned long last_recv = 0;
+    unsigned long last_s_ackack = 0;
+    unsigned long last_r_ackack = 0;
 };

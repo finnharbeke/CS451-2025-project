@@ -48,7 +48,7 @@ class Perfect {
       last_recv = recv;
     }
 
-    void send(unsigned int msg_id, char* msg, unsigned char dest) {
+    void send(unsigned long msg_id, char* msg, unsigned char dest) {
       sent++;
       st.send(msg_id, msg, dest);
     }
@@ -65,9 +65,9 @@ class Perfect {
   private:
     Stubborn st;
     std::function<void(unsigned char, char*, char*)> app_receive;
-    unsigned int sent = 0;
-    unsigned int recv = 0;
+    unsigned long sent = 0;
+    unsigned long recv = 0;
 
-    unsigned int last_sent = 0;
-    unsigned int last_recv = 0;
+    unsigned long last_sent = 0;
+    unsigned long last_recv = 0;
 };

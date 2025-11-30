@@ -13,7 +13,7 @@
 
 
 #include "global.h"
-#include "beb.cpp"
+#include "urb.cpp"
 #include "ram.cpp"
 #include "msg_codec.cpp"
 
@@ -23,7 +23,7 @@ public:
   Process(unsigned long id_, unsigned char n, unsigned long m_, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
       : addrs(addrs_), id(static_cast<unsigned char>(id_)),
-      network(BEB(id, n, addrs,
+      network(URB(id, n, addrs,
         std::bind(&Process::send_batch, this),
         std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
       ))
@@ -100,12 +100,10 @@ public:
               << 1000.0 * static_cast<double>(c_end - c_start) / CLOCKS_PER_SEC << ","
               << std::chrono::duration<double, std::milli>(t_end - t_start).count() << ","
               << getCurrentRAM() << ","
-              << msg_count - last_msg_count << ","
               << seq_nr - last_seq_nr << ","
               << log_r - last_log_r << ",";
 
     last_seq_nr = seq_nr;
-    last_msg_count = msg_count;
     last_log_r = log_r;
   }
 
@@ -141,10 +139,10 @@ public:
       unsigned int d = m - seq_nr + 1;
       k = (d < MAX_MSG_PER_PACKET) ? static_cast<char>(d) : MAX_MSG_PER_PACKET;
 
-      char *msg = codec::compose_batch(id, msg_count, k, seq_nr);
+      char *msg = codec::compose_batch(id, k, seq_nr);
       if (OO >= 4)
         std::cout << "composed " << msg << std::endl;
-      network.send(msg_count++, msg);
+      network.send(msg);
 
       for (unsigned char j = 0; j < k; j++)
       {
@@ -191,7 +189,7 @@ public:
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
-  BEB network;
+  URB network;
   unsigned int m = 0;
   unsigned int seq_nr = 1;
   unsigned int msg_count = 1;
@@ -205,6 +203,5 @@ private:
   const std::chrono::time_point<std::chrono::high_resolution_clock> t_start = std::chrono::high_resolution_clock::now();
   unsigned int last_seq_nr = seq_nr;
   unsigned int last_log_r = log_r;
-  unsigned int last_msg_count = msg_count;
   unsigned int stats_round = 0;
 };

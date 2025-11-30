@@ -9,9 +9,22 @@
 
 namespace codec
 {
+    void add_timestamp(char* msg, std::chrono::system_clock::time_point when);
+    void add_timestamp(char* msg, std::chrono::system_clock::time_point when) {
+        // TIMESTAMP
+        auto timestamp = when.time_since_epoch().count();
+        char* ptr = msg;
+        ptr++; // beb sender
+        ptr += _ID_S; // beb sender
+        ptr++; // unit sep
+        int written = snprintf(ptr, _TIME_S + 1, "%.16lx", timestamp);
+        ptr += written;
+        *ptr = 31; // ascii unit separator as msg separator
+        ++ptr;
+    }
 
-    char *compose_batch(unsigned char from, unsigned int msg_id, unsigned char nr_msgs, unsigned int seq_nr);
-    char *compose_batch(unsigned char from, unsigned int msg_id, unsigned char nr_msgs, unsigned int seq_nr)
+    char *compose_batch(unsigned char from, unsigned char nr_msgs, unsigned int seq_nr);
+    char *compose_batch(unsigned char from, unsigned char nr_msgs, unsigned int seq_nr)
     {
         if (nr_msgs > MAX_MSG_PER_PACKET)
         {
@@ -21,29 +34,33 @@ namespace codec
         char *buffer = static_cast<char *>(malloc(PACKET_LEN));
         char *ptr = buffer;
 
-        // sender id
-        *ptr = static_cast<char>(from + '0'); // nicer
+        // leave sender id empty
+        // *ptr = static_cast<char>(from + '0'); // nicer
         ptr++;
-
-        int written = snprintf(ptr, _CMPRSD_S + 1, "%x", msg_id);
-        ptr += written;
+        
+        // leave beb_id empty
+        ptr += _ID_S;
         *ptr = 31; // ascii unit separator as msg separator
         ptr++;
 
-        // TIMESTAMP
-        auto timestamp = std::chrono::system_clock::now().time_since_epoch().count();
-        snprintf(ptr, _TIME_S + 1, "%.16lx", timestamp);
-        while (*ptr != 0)
-            ++ptr;
+        auto now = std::chrono::system_clock::now();
+        add_timestamp(buffer, now);
+        ptr += _TIME_S;
+        ptr++; // unit sep
+        
+        // original sender id
+        ptr++;
+
+        // leave urbid empty
+        ptr += _CMPRSD_S;
         *ptr = 31; // ascii unit separator as msg separator
-        ++ptr;
+        ptr++;
 
         for (unsigned char i = 0; i < nr_msgs; i++)
         {
             // write the longs as hexadecimals
-            snprintf(ptr, _CMPRSD_S + 1, "%x", seq_nr + i);
-            while (*ptr != 0)
-                ++ptr;
+            int written = snprintf(ptr, _CMPRSD_S + 1, "%x", seq_nr + i);
+            ptr += written;
             *ptr = 31; // ascii unit separator as msg separator
             ++ptr;
         }
@@ -51,6 +68,58 @@ namespace codec
         --ptr;
         *ptr = 0;
 
+        return buffer;
+    }
+
+    void add_beb_msg_sender_n_id(char* msg, unsigned char from, unsigned long msg_id);
+    void add_beb_msg_sender_n_id(char* msg, unsigned char from, unsigned long msg_id)
+    {
+        char *ptr = msg;
+        *ptr = static_cast<char>(from + '0'); // nicer
+        ptr++;
+        int written = snprintf(ptr, _ID_S + 1, "%.16lx", msg_id);
+        ptr += written;
+        *ptr = 31; // unit sep
+        ptr++;
+    }
+    
+    void add_urb_msg_sender_n_id(char* msg, unsigned char from, unsigned int msg_id);
+    void add_urb_msg_sender_n_id(char* msg, unsigned char from, unsigned int msg_id)
+    {
+        char *ptr = msg;
+        ptr++; // sender_id
+        ptr += _ID_S; // beb_id
+        ptr++; // unit sep
+        ptr += _TIME_S; // timestamp
+        ptr++; // unit sep
+        *ptr = static_cast<char>(from + '0'); // orig sender_id
+        ptr++;
+        int written = snprintf(ptr, _CMPRSD_S + 1, "%.8x", msg_id);
+        ptr += written;
+        *ptr = 31; // unit sep
+        ptr++;
+    }
+
+    char* beb_from_other(char* urb_part);
+    char* beb_from_other(char* urb_part) {
+        char *buffer = static_cast<char *>(malloc(PACKET_LEN));
+        char *ptr = buffer;
+
+        // leave sender id empty
+        // *ptr = static_cast<char>(from + '0'); // nicer
+        ptr++;
+        
+        // leave beb_id empty
+        ptr += _ID_S;
+        *ptr = 31; // ascii unit separator as msg separator
+        ptr++;
+
+        auto now = std::chrono::system_clock::now();
+        add_timestamp(buffer, now);
+        ptr += _TIME_S;
+        ptr++; // unit sep
+        
+        strcpy(ptr, urb_part);
         return buffer;
     }
 

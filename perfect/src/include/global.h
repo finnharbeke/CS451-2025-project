@@ -31,14 +31,15 @@ const char MAX_MSG_PER_PACKET = 8;
 const unsigned char _TIME_S = 16; // long long in hex
 const unsigned char _INT_S = sizeof(unsigned int); // in bytes, usually 4 ie max is 2^32-1
 const unsigned char _CMPRSD_S = 8; // space for hexadecimal to write unsigned int
+const unsigned char _ID_S = 16; // beb_msgids can be more than urb, so more than int holds
 
 // PACKET
-// id msg_id | timepoint | seq_nr | seq_nr | seq_nr null
-const size_t PACKET_LEN = 1 + _CMPRSD_S + 1 + _TIME_S + (1+_CMPRSD_S) * MAX_MSG_PER_PACKET + 1;
+// id bebmsg_id | timepoint | orig_id urbmsg_id | seq_nr | seq_nr | seq_nr null
+const size_t PACKET_LEN = 1 + _ID_S + 1 + _TIME_S + 1 + 1 + _CMPRSD_S + (1+_CMPRSD_S) * MAX_MSG_PER_PACKET + 1;
 // ACK
 // id ack left | right null
-const size_t ACK_LEN = 2 + _CMPRSD_S + 1 + _CMPRSD_S + 1;
+const size_t ACK_LEN = 2 + _ID_S + 1 + _ID_S + 1;
 // ACKACK
 // id ack ack timepoint | left | right null
-const size_t ACKACK_LEN = 3 + _TIME_S + 1 + _CMPRSD_S + 1 + _CMPRSD_S + 1;
+const size_t ACKACK_LEN = 3 + _TIME_S + 1 + _ID_S + 1 + _ID_S + 1;
 const long MAX_RECVD = static_cast<long>(PACKET_LEN);

@@ -100,10 +100,10 @@ class FairLoss {
     std::function<void(char*, ssize_t)> app_receive;
     int sock;
 
-    unsigned int sent = 0;
-    unsigned int recv = 0;
-    unsigned int recv_in_q = 0;
-    unsigned int last_sent = 0;
-    unsigned int last_recv = 0;
-    unsigned int last_recv_in_q = 0;
+    unsigned long sent = 0;
+    unsigned long recv = 0;
+    unsigned long recv_in_q = 0;
+    unsigned long last_sent = 0;
+    unsigned long last_recv = 0;
+    unsigned long last_recv_in_q = 0;
 };
