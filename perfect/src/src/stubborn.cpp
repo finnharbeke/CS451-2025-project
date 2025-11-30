@@ -54,11 +54,16 @@ class Stubborn {
     }
 
     void stats() {
+      size_t pa = 0;
+      for (auto& [sender, IT] : pending_acks) {
+        pa += IT.size();
+      }
+
       std::cout << sent - last_sent << "," << send_cycles - last_send_cycles << ","
         << s_ack - last_s_ack << "," << r_ack - last_r_ack << ","
         << ack_cycles - last_ack_cycles << "," << r_msg - last_r_msg << ","
         << recv - last_recv << "," << s_ackack - last_s_ackack << ","
-        << r_ackack - last_r_ackack << "," << lookup.size() << ",";
+        << r_ackack - last_r_ackack << "," << lookup.size() << "," << acked.size() << "," << pa << ",";
       
       last_sent = sent;
       last_send_cycles = send_cycles;
@@ -122,9 +127,8 @@ class Stubborn {
         while (*ptr != 31)
           ptr++;
         ptr++;
-        snprintf(ptr, _TIME_S+1, "%.16lx", now.time_since_epoch().count());
-        while (*ptr != 0)
-          ptr++;
+        int written = snprintf(ptr, _TIME_S+1, "%.16lx", now.time_since_epoch().count());
+        ptr += written;
         *ptr = 31;
 
         stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
@@ -247,9 +251,8 @@ class Stubborn {
       *ptr = 6; // ack
       ++ptr;
 
-      snprintf(ptr, _CMPRSD_S+1, "%x", inter.left);
-      while (*ptr != 0)
-        ++ptr;
+      int written = snprintf(ptr, _CMPRSD_S+1, "%x", inter.left);
+      ptr += written;
       *ptr = 31; // ascii unit separator
       ++ptr;
 

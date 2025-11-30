@@ -21,7 +21,7 @@ class FairLoss {
     }
 
     void stats() {
-      std::cout << sent - last_sent << "," << recv - last_recv << "," << recv_in_q - last_recv_in_q << std::endl;
+      std::cout << sent - last_sent << "," << recv - last_recv << "," << recv_in_q - last_recv_in_q << "," << msg_queue.size_approx() << std::endl;
       last_sent = sent;
       last_recv = recv;
       last_recv_in_q = recv_in_q;
@@ -72,9 +72,11 @@ class FairLoss {
           buffer[msg_len] = '\0';  // add null terminator
           if (OO >= 4) std::cout << "fl_r " << buffer << std::endl;
           recv++;
-          succeeded = msg_queue.try_enqueue(std::pair(buffer, msg_len));
+          succeeded = msg_queue.try_enqueue(std::pair<char*, ssize_t>(buffer, msg_len));
           if (succeeded)
             recv_in_q++;
+          else
+            free(buffer);
         }
       }
     }
@@ -89,6 +91,7 @@ class FairLoss {
           continue;
         }
         app_receive(pair.first, pair.second);
+        free(pair.first);
       }
     }
 

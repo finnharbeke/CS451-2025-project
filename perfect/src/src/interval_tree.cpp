@@ -87,6 +87,11 @@ class IntervalTree {
         ReadView readView() const {
             return ReadView(m, S);
         }
+
+        size_t size() {
+            std::lock_guard lock(m);
+            return S.size();
+        }
     
     private:
         std::set<Interval, std::less<>> S;

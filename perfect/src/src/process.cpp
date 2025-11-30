@@ -122,6 +122,8 @@ public:
 
   bool send_batch()
   {
+    if (seq_nr > m)
+      return true;
     if (OO >= 2)
       std::cout << "keeping sending from" << seq_nr << std::endl;
     // only send (MAX_PENDING >> 1) new messages

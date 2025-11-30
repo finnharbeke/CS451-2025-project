@@ -5,7 +5,7 @@
 
 int main() {
     int m = 500000;
-    int n = 5;
+    int n = 10;
     std::vector<std::vector<bool> > seen;
     for (int i = 0; i <= n; i++) {
         seen.push_back(std::vector<bool>(m+1, false));
