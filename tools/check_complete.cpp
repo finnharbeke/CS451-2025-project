@@ -14,7 +14,7 @@ void check(int p, int m, int n) {
     
     char buf[256];
     snprintf(buf, sizeof(buf), "../example/output/proc%02d.output", p);
-    std::cout << "path " << buf << std::endl;
+    std::cout << "reading " << buf << "... ";
     std::ifstream file(buf);
     int x;
     int sender;
@@ -45,18 +45,33 @@ void check(int p, int m, int n) {
         // if (x > 30)
         //     std::exit(0);
     }
-    std::cout << lines << std::endl;
+    std::cout << lines << " lines read!" << std::endl;
     // std::exit(0);
 
+    std::vector<int > missing;
+    for (int i = 0; i <= n; i++) {
+        missing.push_back(0);
+    }
+
     for (int s = 0; s <= n; ++s) {
+
         for (int i = 1; i <= m; ++i) {
             if (!seen[s][i]) {
-                if (s == 0)
-                    std::cout << "Missing in broadcast: " << i << "\n";
-                else
-                    std::cout << "Missing from " << s << ": " << i << "\n";
+                missing[s] += 1;
+                // if (s == 0)
+                //     std::cout << "Missing in broadcast: " << i << "\n";
+                // else
+                //     std::cout << "Missing from " << s << ": " << i << "\n";
             }
         }
+    }
+
+    for (int s = 0; s <= n; ++s) {
+        if (missing[s] == 0) continue;
+        if (s == 0)
+            std::cout << p << ">? not sent:  " << missing[s] << std::endl;
+        else
+            std::cout << s << ">" << p << " not deliv: " << missing[s] << std::endl;
     }
 }
 
