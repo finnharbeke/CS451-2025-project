@@ -109,7 +109,7 @@ class Stubborn {
       {
         std::unique_lock<std::mutex> lock(Q_mutx);
         cv_empty.wait(lock, [&]{
-          if (resumed_flag.load()) return true;   // break wait after SIGCONT
+          // if (resumed_flag.load()) return true;   // break wait after SIGCONT
           return !Q.empty();
         });
         until = (*Q.begin()).next_send;
@@ -169,7 +169,7 @@ class Stubborn {
     void await_ready_for_more() {
       std::unique_lock<std::mutex> lock(Q_mutx);
       cv_ready.wait(lock, [&]{
-        if (resumed_flag.load()) return true;   // break wait after SIGCONT
+        // if (resumed_flag.load()) return true;   // break wait after SIGCONT
         return Q.size() < REFILL;
       });
     }

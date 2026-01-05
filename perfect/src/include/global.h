@@ -50,5 +50,5 @@ const long HEARTBEAT_MS = 100;
 const long SUSPECT = 10;
 const long MAX_RECVD = static_cast<long>(PACKET_LEN);
 
-std::atomic<bool> resumed_flag{false};
+// std::atomic<bool> resumed_flag{false};
 
