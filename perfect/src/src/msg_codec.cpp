@@ -15,7 +15,7 @@ namespace codec
         auto timestamp = when.time_since_epoch().count();
         char* ptr = msg;
         ptr++; // beb sender
-        ptr += _ID_S; // beb sender
+        ptr += _ID_S; // beb id
         ptr++; // unit sep
         int written = snprintf(ptr, _TIME_S + 1, "%.16lx", timestamp);
         ptr += written;
@@ -123,8 +123,10 @@ namespace codec
         return buffer;
     }
 
-    std::vector<unsigned int> recover_seqnrs(char* msg, char* end);
-    std::vector<unsigned int> recover_seqnrs(char* msg, char* end) {
+    std::vector<unsigned int> recover_seqnrs(char* msg);
+    std::vector<unsigned int> recover_seqnrs(char* msg) {
+
+        char* end = msg + strlen(msg);
         std::vector<unsigned int> v;
         char* sep = msg;
         if (OO >= 4)

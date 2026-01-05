@@ -15,11 +15,11 @@ class BEB {
   public:
     BEB(unsigned char id_, unsigned char n_,
       std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<void(unsigned char, char*, char*)> app_receive
+      std::function<void(unsigned char, char*)> app_receive
     ) :
     pf(
       Perfect(id_, addrs_,
-        std::bind(&BEB::receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
+        std::bind(&BEB::receive, this, std::placeholders::_1, std::placeholders::_2))
     ), id(id_), n(n_), app_receive(app_receive) {}
 
     void bind_address(sockaddr_in* address) {
@@ -72,9 +72,9 @@ class BEB {
       pf.listen();
     }
 
-    void receive(unsigned char sender, char* msg, char* end) {
+    void receive(unsigned char sender, char* msg) {
         // accessed by both send and receive thread
-        app_receive(sender, msg, end);
+        app_receive(sender, msg);
         recv++;
     }
 
@@ -82,7 +82,7 @@ class BEB {
     Perfect pf;
     unsigned char id;
     unsigned char n;
-    std::function<void(unsigned char, char*, char*)> app_receive;
+    std::function<void(unsigned char, char*)> app_receive;
     
     unsigned long msg_id_counter = 1;
     unsigned long sent = 0;

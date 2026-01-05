@@ -13,7 +13,7 @@
 
 
 #include "global.h"
-#include "urb.cpp"
+#include "fifo.cpp"
 #include "ram.cpp"
 #include "msg_codec.cpp"
 
@@ -23,9 +23,8 @@ public:
   Process(unsigned long id_, unsigned char n, unsigned long m_, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
       : addrs(addrs_), id(static_cast<unsigned char>(id_)),
-      network(URB(id, n, addrs,
-        std::bind(&Process::send_batch, this),
-        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
+      network(FIFO(id, n, addrs,
+        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2)
       ))
   {
 
@@ -46,7 +45,7 @@ public:
 
   void main()
   {
-    std::thread ew([&]{ network.enqueueWorker(); });
+    std::thread ew(&Process::enqueueWorker, this);
     ew.detach();
     std::thread sw([&]{ network.sendWorker(); });
     sw.detach();
@@ -109,11 +108,20 @@ public:
     last_log_r = log_r;
   }
 
-  void log_receive(unsigned char from, char *msg, char* end)
+  void enqueueWorker() {
+    bool done = send_batch();
+    while (!done) {
+        network.await_ready_for_more();
+        done = send_batch();
+    }
+    if (OO >= 1) std::cout << "done sending" << std::endl;
+  }
+
+  void log_receive(unsigned char from, char *msg)
   {
     // receives message formatted as
     // seq_nr | seq_nr | seq_nr ...
-    auto seq_nrs = codec::recover_seqnrs(msg, end);
+    auto seq_nrs = codec::recover_seqnrs(msg);
     for (auto seq_nr : seq_nrs) {
       if (OO >= 3)
         std::cout << "logging " << seq_nr << " from " << static_cast<short>(from) << std::endl;
@@ -191,7 +199,7 @@ public:
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
-  URB network;
+  FIFO network;
   unsigned int m = 0;
   unsigned int seq_nr = 1;
   unsigned int msg_count = 1;

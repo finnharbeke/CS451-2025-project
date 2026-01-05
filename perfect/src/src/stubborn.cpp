@@ -42,10 +42,10 @@ struct StubbornMsg {
 class Stubborn {
   public:
     Stubborn(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<void(unsigned char, char*, char*)> app_receive
+      std::function<void(unsigned char, char*)> app_receive
     )
     : id(id_), addrs(addrs_), 
-      fl(FairLoss(std::bind(&Stubborn::receive, this, std::placeholders::_1, std::placeholders::_2))),
+      fl(FairLoss(std::bind(&Stubborn::receive, this, std::placeholders::_1))),
       app_receive(app_receive) {
       for (auto& [sender, _]: *addrs) {
         pending_acks.try_emplace(sender); // constructs default IT inplace
@@ -182,10 +182,9 @@ class Stubborn {
       fl.receiveWorker();
     }
 
-    void receive(char* buffer, ssize_t msg_len) {
+    void receive(char* buffer) {
       if (OO >= 3) std::cout << "st got smth" << std::endl;
       recv++;
-      char* end = buffer + msg_len;
       unsigned char sender = static_cast<unsigned char>(*buffer - '0');
       
       char second = *(buffer + 1);
@@ -194,9 +193,9 @@ class Stubborn {
         char third = *(buffer + 2);
         if (third == 6) {
           // ackack
-          receive_ackack(sender, buffer+3, end);
+          receive_ackack(sender, buffer+3);
         } else {
-          receive_ack(sender, buffer+2, end);
+          receive_ack(sender, buffer+2);
         }
       } else if (second == '&') {
         {
@@ -211,7 +210,7 @@ class Stubborn {
           }
         }
       } else {
-        receive_msg(sender, buffer+1, end);
+        receive_msg(sender, buffer+1);
       }
     }
 
@@ -221,7 +220,7 @@ class Stubborn {
       return (static_cast<unsigned long>(sender) << 40) | msg_id;
     }
 
-    void receive_msg(unsigned char sender, char* buffer, char* end) {
+    void receive_msg(unsigned char sender, char* buffer) {
       r_msg++;
       char* msg = nullptr;
       unsigned long msg_id = strtoul(buffer, &msg, 16);
@@ -241,7 +240,7 @@ class Stubborn {
       if (lookup.find(hash) == lookup.end()) {
         lookup.emplace(hash);
         add_to_ack(sender, msg_id);
-        app_receive(sender, msg, end);
+        app_receive(sender, msg);
       }
     }
 
@@ -304,7 +303,7 @@ class Stubborn {
       return buffer;
     }
 
-    void receive_ack(unsigned char sender, char* msg, char* end) {
+    void receive_ack(unsigned char sender, char* msg) {
       r_ack++;
 
       char* sep = msg;
@@ -323,7 +322,7 @@ class Stubborn {
         std::lock_guard<std::mutex> lock(ackedset_mutxs[sender]);
         for (auto msg_id = left; msg_id <= right; msg_id++) {
           if (OO >= 3)
-            std::cout << "removing from sending to " << sender << ": " << msg_id << std::endl;
+            std::cout << "removing from sending to " << sender + '0' << ": " << msg_id << std::endl;
           // remove msg_id from sending
           acked[sender].emplace(msg_id);
         }
@@ -357,7 +356,7 @@ class Stubborn {
       s_ackack++;
     }
 
-    void receive_ackack(unsigned char sender, char* msg, char* end) {
+    void receive_ackack(unsigned char sender, char* msg) {
       r_ackack++;
       char* head = msg;
       unsigned long cutoff = strtoul(head, &head, 16);
@@ -424,7 +423,7 @@ class Stubborn {
     unsigned char id;
     std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
     FairLoss fl;
-    std::function<void(unsigned char, char*, char*)> app_receive;
+    std::function<void(unsigned char, char*)> app_receive;
     std::unordered_set<unsigned long> lookup{};
     std::multiset<StubbornMsg> Q;
     // could be interval tree but idk since single removal

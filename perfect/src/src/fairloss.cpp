@@ -10,8 +10,8 @@
 
 class FairLoss {
   public:
-    FairLoss(std::function<void(char*, ssize_t)> app_receive) :
-      msg_queue(moodycamel::ReaderWriterQueue<std::pair<char*, ssize_t>>(MSGQSIZE)),
+    FairLoss(std::function<void(char*)> app_receive) :
+      msg_queue(moodycamel::ReaderWriterQueue<char*>(MSGQSIZE)),
       app_receive(app_receive) {
       if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("couldn't create socket");
@@ -72,7 +72,7 @@ class FairLoss {
           buffer[msg_len] = '\0';  // add null terminator
           if (OO >= 4) std::cout << "fl_r " << buffer << std::endl;
           recv++;
-          succeeded = msg_queue.try_enqueue(std::pair<char*, ssize_t>(buffer, msg_len));
+          succeeded = msg_queue.try_enqueue(buffer);
           if (succeeded)
             recv_in_q++;
           else
@@ -83,21 +83,21 @@ class FairLoss {
 
     void receiveWorker() {
       while (true) {
-        std::pair<char*, ssize_t> pair;
-        bool succeeded = msg_queue.try_dequeue(pair);
+        char* msg;
+        bool succeeded = msg_queue.try_dequeue(msg);
         if (!succeeded) {
           if (OO >= 3) std::cout << "sleep in receive" << std::endl;
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
           continue;
         }
-        app_receive(pair.first, pair.second);
-        free(pair.first);
+        app_receive(msg);
+        free(msg);
       }
     }
 
   private:
-    moodycamel::ReaderWriterQueue<std::pair<char*, ssize_t>> msg_queue;
-    std::function<void(char*, ssize_t)> app_receive;
+    moodycamel::ReaderWriterQueue<char*> msg_queue;
+    std::function<void(char*)> app_receive;
     int sock;
 
     unsigned long sent = 0;

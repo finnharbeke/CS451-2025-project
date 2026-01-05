@@ -14,11 +14,11 @@ class Perfect {
   public:
     Perfect(unsigned char id_,
       std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<void(unsigned char, char*, char*)> app_receive
+      std::function<void(unsigned char, char*)> app_receive
     ) :
     st(
       Stubborn(id_, addrs_,
-        std::bind(&Perfect::receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
+        std::bind(&Perfect::receive, this, std::placeholders::_1, std::placeholders::_2))
     ), app_receive(app_receive) {}
 
     void bind_address(sockaddr_in* address) {
@@ -61,14 +61,14 @@ class Perfect {
       st.listen();
     }
 
-    void receive(unsigned char sender, char* msg, char* end) {
+    void receive(unsigned char sender, char* msg) {
       recv++;
-      app_receive(sender, msg, end);
+      app_receive(sender, msg);
     }
 
   private:
     Stubborn st;
-    std::function<void(unsigned char, char*, char*)> app_receive;
+    std::function<void(unsigned char, char*)> app_receive;
     unsigned long sent = 0;
     unsigned long recv = 0;
 

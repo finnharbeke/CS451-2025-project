@@ -37,6 +37,7 @@ const unsigned char _ID_S = 16; // beb_msgids can be more than urb, so more than
 // PACKET
 // id bebmsg_id | timepoint | orig_id urbmsg_id | seq_nr | seq_nr | seq_nr null
 const size_t PACKET_LEN = 1 + _ID_S + 1 + _TIME_S + 1 + 1 + _CMPRSD_S + (1+_CMPRSD_S) * MAX_MSG_PER_PACKET + 1;
+const size_t PAYLOAD_LEN = (_CMPRSD_S+1) * MAX_MSG_PER_PACKET;
 // ACK
 // id ack left | right null
 const size_t ACK_LEN = 2 + _ID_S + 1 + _ID_S + 1;

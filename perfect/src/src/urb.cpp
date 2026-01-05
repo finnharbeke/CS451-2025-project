@@ -15,13 +15,12 @@ class URB {
   public:
     URB(unsigned char id_, unsigned char n_,
       std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<bool()> app_send,
-      std::function<void(unsigned char, char*, char*)> app_receive
+      std::function<void(unsigned char, unsigned int, char*)> app_receive
     ) :
     beb(
       BEB(id_, n_, addrs_,
-        std::bind(&URB::receive, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
-    ), id(id_), n(n_), app_send(app_send), app_receive(app_receive) {
+        std::bind(&URB::receive, this, std::placeholders::_1, std::placeholders::_2))
+    ), id(id_), n(n_), app_receive(app_receive) {
         for (unsigned char p = 1; p <= n; p++) {
             pending.try_emplace(p); // constructs default IT inplace
             pending_mutxs.try_emplace(p);
@@ -32,15 +31,6 @@ class URB {
 
     void bind_address(sockaddr_in* address) {
         beb.bind_address(address);
-    }
-
-    void enqueueWorker() {
-        bool done = app_send();
-        while (!done) {
-            beb.await_ready_for_more();
-            done = app_send();
-        }
-        if (OO >= 1) std::cout << "done sending" << std::endl;
     }
     
     void sendWorker() {
@@ -66,6 +56,10 @@ class URB {
         last_recv = recv;
     }
 
+    void await_ready_for_more() {
+        beb.await_ready_for_more();
+    }
+
     void send(char* msg) {
         auto msg_id = msg_id_counter++;
         {
@@ -81,7 +75,7 @@ class URB {
         beb.listen();
     }
 
-    void receive(unsigned char beb_sender, char* msg, char* end) {
+    void receive(unsigned char beb_sender, char* msg) {
         // accessed by both send and receive thread
         char* ptr = msg;
         unsigned char sender = static_cast<unsigned char>(*ptr - '0');
@@ -106,7 +100,7 @@ class URB {
 
         if (ack[sender][msg_id] > n/2 && delivered[sender].find(msg_id) == delivered[sender].end()) {
             delivered[sender].emplace(msg_id);
-            app_receive(sender, ptr, end);
+            app_receive(sender, msg_id, ptr);
         }
         recv++;
     }
@@ -115,8 +109,7 @@ class URB {
     BEB beb;
     unsigned char id;
     unsigned char n;
-    std::function<bool()> app_send;
-    std::function<void(unsigned char, char*, char*)> app_receive;
+    std::function<void(unsigned char, unsigned int, char*)> app_receive;
 
     std::unordered_map<unsigned char, std::unordered_set<unsigned int>> pending;
     std::unordered_map<unsigned char, std::mutex> pending_mutxs;
