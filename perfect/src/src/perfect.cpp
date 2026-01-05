@@ -66,10 +66,6 @@ class Perfect {
       app_receive(sender, msg, end);
     }
 
-    void contin() {
-      st.contin();
-    }
-
   private:
     Stubborn st;
     std::function<void(unsigned char, char*, char*)> app_receive;

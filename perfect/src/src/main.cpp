@@ -34,18 +34,6 @@ static void stop(int) {
   exit(0);
 }
 
-// SIGCONT handler: repair state after STOP
-void handle_sigcont(int);
-void handle_sigcont(int) {
-    std::cerr << "[resume] SIGCONT received, repairing state\n";
-
-    resumed_flag.store(true);
-    
-    // continue
-    proc->contin();
-    resumed_flag.store(false);
-}
-
 int main(int argc, char **argv) {
   signal(SIGTERM, stop);
   signal(SIGINT, stop);

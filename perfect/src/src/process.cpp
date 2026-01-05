@@ -188,10 +188,6 @@ public:
     }
   }
 
-  void contin() {
-    network.contin();
-  }
-
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;

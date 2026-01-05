@@ -420,11 +420,6 @@ class Stubborn {
       cv_empty.notify_one();
     }
 
-    void contin() {
-      fl.contin();
-    }
-
-
   private:
     unsigned char id;
     std::unordered_map<unsigned char, struct sockaddr_in>* addrs;

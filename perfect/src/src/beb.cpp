@@ -78,10 +78,6 @@ class BEB {
         recv++;
     }
 
-    void contin() {
-        pf.contin();
-    }
-
   private:
     Perfect pf;
     unsigned char id;

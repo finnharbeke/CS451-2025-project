@@ -111,10 +111,6 @@ class URB {
         recv++;
     }
 
-    void contin() {
-        beb.contin();
-    }
-
   private:
     BEB beb;
     unsigned char id;
