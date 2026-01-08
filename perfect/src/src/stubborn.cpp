@@ -160,7 +160,7 @@ class Stubborn {
         std::unique_lock<std::mutex> lock(Q_mutx);
         Q.insert(stbmsg);
       }
-      if (OO >= 2) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
+      if (OO >= 3) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
       fl.send(stbmsg.msg, &(*addrs)[stbmsg.dest]);
       sent++;
       
@@ -183,7 +183,7 @@ class Stubborn {
     }
 
     void receive(char* buffer) {
-      if (OO >= 3) std::cout << "st got smth" << std::endl;
+      if (OO >= 4) std::cout << "st got smth" << std::endl;
       recv++;
       unsigned char sender = static_cast<unsigned char>(*buffer - '0');
       
@@ -229,10 +229,10 @@ class Stubborn {
       unsigned long timestamp_ul = strtoul(msg, &msg, 16);
       // std::cout << msg_id << " " << timestamp_ul << std::endl;
       msg++;
-      if (OO >= 2)
+      if (OO >= 3)
         std::cout << "st_r " << static_cast<short>(sender)  << " " << msg_id << std::endl;
       if (timestamp_ul < cutoffs[sender]) {
-        if (OO >= 2)
+        if (OO >= 3)
           std::cout << timestamp_ul << " vs " << cutoffs[sender] << std::endl;
         return;
       }
@@ -280,7 +280,7 @@ class Stubborn {
     }
 
     char* compose_ack(unsigned char sender, Interval inter) {
-      if (OO >= 3)
+      if (OO >= 4)
         std::cout << "composing ack to " << static_cast<short>(sender)
         << ", [" << inter.left << "," << inter.right << "]" << std::endl;
       
@@ -295,7 +295,7 @@ class Stubborn {
 
       int written = snprintf(ptr, _ID_S+1, "%lx", inter.left);
       ptr += written;
-      *ptr = 31; // ascii unit separator
+      *ptr = 30; // ascii unit separator
       ++ptr;
 
       snprintf(ptr, _ID_S+1, "%lx", inter.right);
@@ -321,7 +321,7 @@ class Stubborn {
       {
         std::lock_guard<std::mutex> lock(ackedset_mutxs[sender]);
         for (auto msg_id = left; msg_id <= right; msg_id++) {
-          if (OO >= 3)
+          if (OO >= 4)
             std::cout << "removing from sending to " << sender + '0' << ": " << msg_id << std::endl;
           // remove msg_id from sending
           acked[sender].emplace(msg_id);
@@ -343,11 +343,11 @@ class Stubborn {
       auto cutoff = std::chrono::system_clock::now().time_since_epoch().count();
       int written = snprintf(ptr, _TIME_S+1, "%.16lx", cutoff);
       ptr += written;
-      *ptr = 31; // ascii unit separator
+      *ptr = 30; // ascii unit separator
       ++ptr;
       written = snprintf(ptr, _ID_S+1, "%lx", left);
       ptr += written;
-      *ptr = 31; // ascii unit separator
+      *ptr = 30; // ascii unit separator
       ++ptr;
       snprintf(ptr, _ID_S+1, "%lx", right);
       fl.send(buffer, &(*addrs)[sender]); // TODO check if multithreaded sending needs checks

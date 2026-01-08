@@ -19,133 +19,21 @@ namespace codec
         ptr++; // unit sep
         int written = snprintf(ptr, _TIME_S + 1, "%.16lx", timestamp);
         ptr += written;
-        *ptr = 31; // ascii unit separator as msg separator
+        *ptr = 30; // ascii record separator as msg separator
         ++ptr;
     }
 
-    char *compose_batch(unsigned char from, unsigned char nr_msgs, unsigned int seq_nr);
-    char *compose_batch(unsigned char from, unsigned char nr_msgs, unsigned int seq_nr)
-    {
-        if (nr_msgs > MAX_MSG_PER_PACKET)
-        {
-            throw std::invalid_argument("'nr_msgs' larger than 8");
-        }
-
-        char *buffer = static_cast<char *>(malloc(PACKET_LEN));
-        char *ptr = buffer;
-
-        // leave sender id empty
-        // *ptr = static_cast<char>(from + '0'); // nicer
-        ptr++;
-        
-        // leave beb_id empty
-        ptr += _ID_S;
-        *ptr = 31; // ascii unit separator as msg separator
-        ptr++;
-
-        auto now = std::chrono::system_clock::now();
-        add_timestamp(buffer, now);
-        ptr += _TIME_S;
-        ptr++; // unit sep
-        
-        // original sender id
-        ptr++;
-
-        // leave urbid empty
-        ptr += _CMPRSD_S;
-        *ptr = 31; // ascii unit separator as msg separator
-        ptr++;
-
-        for (unsigned char i = 0; i < nr_msgs; i++)
-        {
-            // write the longs as hexadecimals
-            int written = snprintf(ptr, _CMPRSD_S + 1, "%x", seq_nr + i);
-            ptr += written;
-            *ptr = 31; // ascii unit separator as msg separator
-            ++ptr;
-        }
-        // change back last one
-        --ptr;
-        *ptr = 0;
-
-        return buffer;
-    }
-
-    void add_beb_msg_sender_n_id(char* msg, unsigned char from, unsigned long msg_id);
-    void add_beb_msg_sender_n_id(char* msg, unsigned char from, unsigned long msg_id)
+    void add_beb_msg_sender_n_id_n_ts(char* msg, unsigned char from, unsigned long msg_id);
+    void add_beb_msg_sender_n_id_n_ts(char* msg, unsigned char from, unsigned long msg_id)
     {
         char *ptr = msg;
         *ptr = static_cast<char>(from + '0'); // nicer
         ptr++;
         int written = snprintf(ptr, _ID_S + 1, "%.16lx", msg_id);
         ptr += written;
-        *ptr = 31; // unit sep
+        *ptr = 30; // record sep
         ptr++;
-    }
-    
-    void add_urb_msg_sender_n_id(char* msg, unsigned char from, unsigned int msg_id);
-    void add_urb_msg_sender_n_id(char* msg, unsigned char from, unsigned int msg_id)
-    {
-        char *ptr = msg;
-        ptr++; // sender_id
-        ptr += _ID_S; // beb_id
-        ptr++; // unit sep
-        ptr += _TIME_S; // timestamp
-        ptr++; // unit sep
-        *ptr = static_cast<char>(from + '0'); // orig sender_id
-        ptr++;
-        int written = snprintf(ptr, _CMPRSD_S + 1, "%.8x", msg_id);
-        ptr += written;
-        *ptr = 31; // unit sep
-        ptr++;
-    }
-
-    char* beb_from_other(char* urb_part);
-    char* beb_from_other(char* urb_part) {
-        char *buffer = static_cast<char *>(malloc(PACKET_LEN));
-        char *ptr = buffer;
-
-        // leave sender id empty
-        // *ptr = static_cast<char>(from + '0'); // nicer
-        ptr++;
-        
-        // leave beb_id empty
-        ptr += _ID_S;
-        *ptr = 31; // ascii unit separator as msg separator
-        ptr++;
-
-        auto now = std::chrono::system_clock::now();
-        add_timestamp(buffer, now);
-        ptr += _TIME_S;
-        ptr++; // unit sep
-        
-        strcpy(ptr, urb_part);
-        return buffer;
-    }
-
-    std::vector<unsigned int> recover_seqnrs(char* msg);
-    std::vector<unsigned int> recover_seqnrs(char* msg) {
-
-        char* end = msg + strlen(msg);
-        std::vector<unsigned int> v;
-        char* sep = msg;
-        if (OO >= 4)
-            std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
-        while (sep != end) {
-            if (OO >= 4)
-            std::cout << "rest buffer " << sep << std::endl;
-            
-            unsigned int seq_nr = static_cast<unsigned int>(strtoul(sep, nullptr, 16));
-            v.push_back(seq_nr);
-            
-            sep = std::find(sep, end, static_cast<char>(31));
-            // end sub_msg (instead of unit separator 31)
-            if (end != sep) {
-                *sep = '\0';
-                sep++;
-            }
-        }
-        return v;
+        add_timestamp(msg, std::chrono::system_clock::now());
     }
 
     char* make_heartbeat(unsigned char id);
@@ -156,5 +44,45 @@ namespace codec
         *(b+2) = '\0';
         return b;
     }
+
+    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
+    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+        char* msg = static_cast<char*>(malloc(
+            PACKET_HEADER_LEN + (with_set ? proposal->size() * (_CMPRSD_S+1) : 0)
+        ));
+        char* ptr = msg;
+
+        ptr++; // beb_sender
+        ptr += _ID_S; // beb msg_id
+        ptr++; // rs
+        ptr += _TIME_S; // time
+        ptr++; // rs
+        *ptr++ = marker; // enquiry / ack / nak
+        *ptr++ = static_cast<char>(round + '0');
+        ptr += snprintf(ptr, _CMPRSD_S + 1, "%x", p_id);
+        if (with_set) {
+            for (auto x : *proposal) {
+                *ptr++ = 31;
+                ptr += snprintf(ptr, _CMPRSD_S + 1, "%x", x);
+            }
+        }
+        *ptr = '\0';
+        
+        return msg;
+    }
+    
+    char* compose_proposal(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
+    char* compose_proposal(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+        return compose_agreement_msg(5, true, p_id, round, proposal);
+    }
+    char* compose_ack(unsigned int p_id, unsigned char round);
+    char* compose_ack(unsigned int p_id, unsigned char round) {
+        return compose_agreement_msg(6, false, p_id, round, nullptr);
+    }
+    char* compose_nak(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
+    char* compose_nak(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+        return compose_agreement_msg(21, true, p_id, round, proposal);
+    }
+
 
 }

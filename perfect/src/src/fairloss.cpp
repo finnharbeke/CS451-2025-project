@@ -29,11 +29,11 @@ class FairLoss {
 
     bool send(char* msg, struct sockaddr_in* dest) {
 
-      if (OO >= 4) {
+      if (OO >= 5) {
         std::cout << "fl_s sending buffer '" << msg << "'\n";
       }
 
-      ssize_t bytes_sent = sendto(sock, msg, strlen(msg), 0,
+      ssize_t bytes_sent = sendto(sock, msg, std::strlen(msg), 0,
         reinterpret_cast<sockaddr*>(dest), sizeof(*dest));
 
       if (bytes_sent < 0) {
@@ -58,10 +58,11 @@ class FairLoss {
       socklen_t from_len = sizeof(from);
       ssize_t msg_len;
       bool succeeded;
+
+      char* buffer = static_cast<char*>(malloc(MAX_RECVD));
       
       while (true) {
-        char* buffer = static_cast<char*>(malloc(MAX_RECVD));
-        if (OO >= 4) std::cout << "fl listening..." << std::endl;
+        if (OO >= 5) std::cout << "fl listening..." << std::endl;
         msg_len = recvfrom(sock, buffer, MAX_RECVD, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0 || msg_len > MAX_RECVD) {
           perror("reading error...\n");
@@ -70,13 +71,15 @@ class FairLoss {
           // exit(-1);
         } else {
           buffer[msg_len] = '\0';  // add null terminator
-          if (OO >= 4) std::cout << "fl_r " << buffer << std::endl;
+          if (OO >= 5) std::cout << "fl_r " << buffer << std::endl;
           recv++;
-          succeeded = msg_queue.try_enqueue(buffer);
+          char* msg = static_cast<char*>(malloc(std::strlen(buffer) + 1));
+          std::strcpy(msg, buffer);
+          succeeded = msg_queue.try_enqueue(msg);
           if (succeeded)
             recv_in_q++;
           else
-            free(buffer);
+            free(msg);
         }
       }
     }
@@ -86,7 +89,7 @@ class FairLoss {
         char* msg;
         bool succeeded = msg_queue.try_dequeue(msg);
         if (!succeeded) {
-          if (OO >= 3) std::cout << "sleep in receive" << std::endl;
+          if (OO >= 4) std::cout << "sleep in receive" << std::endl;
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
           continue;
         }

@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     std::cout << "Doing some initialization...\n\n";
   }
   
-  FIFOConfig config(parser.configPath());
+  LatticeConfig config(parser.configPath());
   
   unsigned char n = static_cast<unsigned char>(hosts.size());
   std::unordered_map<unsigned char, struct sockaddr_in> addrs;
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
   // std::ios_base::sync_with_stdio(false);
   // std::cin.tie(nullptr);
   if (OO >= 1) std::cout << "Broadcasting and delivering messages...\n\n";
-  proc = new Process(parser.id(), n, config.m, parser.outputPath(), &addrs);
+  proc = new Process(parser.id(), n, &config, parser.outputPath(), &addrs);
   proc->main();
 
   if (OO >= 1) std::cout << "All done, let's sleep!\n";

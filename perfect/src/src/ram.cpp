@@ -9,7 +9,7 @@
 size_t parseLine(char*);
 size_t parseLine(char* line) {
     // This assumes that a digit will be found and the line ends in " Kb".
-    size_t i = strlen(line);
+    size_t i = std::strlen(line);
     const char* p = line;
     while (*p <'0' || *p > '9') p++;
     line[i-3] = '\0';

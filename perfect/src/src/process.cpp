@@ -13,31 +13,31 @@
 
 
 #include "global.h"
-#include "fifo.cpp"
+#include "lattice.cpp"
+#include "config.cpp"
 #include "ram.cpp"
 #include "msg_codec.cpp"
 
 class Process
 {
 public:
-  Process(unsigned long id_, unsigned char n, unsigned long m_, const char *outputPath,
+  Process(unsigned long id_, unsigned char n, LatticeConfig* config, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
       : addrs(addrs_), id(static_cast<unsigned char>(id_)),
-      network(FIFO(id, n, addrs,
-        std::bind(&Process::log_receive, this, std::placeholders::_1, std::placeholders::_2)
-      ))
+        network(LatticeAgreement(id, n, config, addrs,
+          std::bind(&Process::decide, this, std::placeholders::_1, std::placeholders::_2)
+        )
+    )
   {
 
     if (OO >= 1)
       std::cout << "setting up process with id " << id_ << std::endl;
 
-    m = static_cast<unsigned int>(m_);          // by assumptions at most 2^31-1
     network.bind_address(&(*addrs)[id]);
 
     // logs
     out.open(outputPath);
-    send_buffer.reserve(LOGBUFSIZE);
-    recv_buffer.reserve(LOGBUFSIZE);
+    buffer.reserve(LOGBUFSIZE);
 
     if (OO >= 1)
       std::cout << "set up process " << static_cast<short>(id) << std::endl;
@@ -45,7 +45,7 @@ public:
 
   void main()
   {
-    std::thread ew(&Process::enqueueWorker, this);
+    std::thread ew([&]{ network.enqueueWorker(); });
     ew.detach();
     std::thread sw([&]{ network.sendWorker(); });
     sw.detach();
@@ -71,7 +71,7 @@ public:
       std::cout << "closing" << std::endl;
     {
       std::lock_guard lock(outmutx);
-      out << send_buffer << recv_buffer;
+      out << buffer;
       out.flush();
       out.close();
     }
@@ -108,104 +108,43 @@ public:
     last_log_r = log_r;
   }
 
-  void enqueueWorker() {
-    bool done = send_batch();
-    while (!done) {
-        network.await_ready_for_more();
-        done = send_batch();
-    }
-    if (OO >= 1) std::cout << "done sending" << std::endl;
-  }
-
-  void log_receive(unsigned char from, char *msg)
+  void decide(unsigned int slot, std::set<unsigned int>* value)
   {
     // receives message formatted as
     // seq_nr | seq_nr | seq_nr ...
-    auto seq_nrs = codec::recover_seqnrs(msg);
-    for (auto seq_nr : seq_nrs) {
-      if (OO >= 3)
-        std::cout << "logging " << seq_nr << " from " << static_cast<short>(from) << std::endl;
-      recv_buffer += "d ";
-      recv_buffer += std::to_string(static_cast<short>(from));
-      recv_buffer += " ";
-      recv_buffer += std::to_string(seq_nr);
-      recv_buffer += "\n";
-      log_r++;
+    // auto seq_nrs = codec::recover_seqnrs(msg);
+    if (OO >= 4)
+      std::cout << "logging decision " << slot << std::endl;
+    auto it = value->cbegin();
+    const auto end = value->cend();
+    if (it != end)
+      buffer += std::to_string(*it++);
+    while (it != end) {
+      buffer += " " + std::to_string(*it++);
     }
-    check_recv_buffer();
+    buffer += '\n';
+    check_buffer();
   }
 
-  bool send_batch()
+  void check_buffer()
   {
-    if (seq_nr > m)
-      return true;
-    if (OO >= 2)
-      std::cout << "keeping sending from" << seq_nr << std::endl;
-    // only send (MAX_PENDING >> 1) new messages
-    for (unsigned int i = 0; i < SEND_BURST; i++)
-    {
-
-      unsigned char k;
-      unsigned int d = m - seq_nr + 1;
-      k = (d < MAX_MSG_PER_PACKET) ? static_cast<char>(d) : MAX_MSG_PER_PACKET;
-
-      char *msg = codec::compose_batch(id, k, seq_nr);
-      if (OO >= 4)
-        std::cout << "composed " << msg << std::endl;
-      network.send(msg);
-
-      for (unsigned char j = 0; j < k; j++)
-      {
-        if (OO >= 3)
-          std::cout << "logging " << static_cast<short>(seq_nr) << std::endl;
-        send_buffer += "b ";
-        send_buffer += std::to_string(seq_nr);
-        send_buffer += "\n";
-        seq_nr++;
-      }
-      check_send_buffer();
-
-      if (seq_nr > m)
-        break;
-    }
-    if (OO >= 2)
-      std::cout << "sent until" << seq_nr - 1 << std::endl;
-    if (OO >= 1 && seq_nr > m)
-      std::cout << "process " << static_cast<short>(id) << " done sending." << std::endl;
-    return seq_nr > m;
-  }
-
-  void check_send_buffer()
-  {
-    if (send_buffer.size() >= LOG_CAP) {
+    if (buffer.size() >= LOG_CAP) {
       {
         std::lock_guard lock(outmutx);
-        out << send_buffer;
+        out << buffer;
       }
-      send_buffer.clear();
-    }
-  }
-  void check_recv_buffer()
-  {
-    if (recv_buffer.size() >= LOG_CAP) {
-      {
-        std::lock_guard lock(outmutx);
-        out << recv_buffer;
-      }
-      recv_buffer.clear();
+      buffer.clear();
     }
   }
 
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
-  FIFO network;
-  unsigned int m = 0;
+  LatticeAgreement network;
   unsigned int seq_nr = 1;
   unsigned int msg_count = 1;
   unsigned int log_r = 0;
-  std::string send_buffer;
-  std::string recv_buffer;
+  std::string buffer;
   std::mutex outmutx;
   std::ofstream out;
 

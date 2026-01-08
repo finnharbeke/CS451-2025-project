@@ -53,16 +53,22 @@ class BEB {
       last_recv = recv;
     }
 
-    void send(char* msg) {
+    void sendto(char* msg, unsigned char p) {
+      auto msg_id = msg_id_counter++;
+      codec::add_beb_msg_sender_n_id_n_ts(msg, id, msg_id);
+      pf.send(msg_id, msg, p);
+    }
+
+    void broadcast_others(char* msg) {
         auto msg_id = msg_id_counter++;
-        codec::add_beb_msg_sender_n_id(msg, id, msg_id);
+        // fills front
+        codec::add_beb_msg_sender_n_id_n_ts(msg, id, msg_id);
         sent++;
         for (unsigned char p = 1; p <= n; p++) {
-            // if (p == id) {
-            //     receive()
-            // } else {
-            char* cpy = static_cast<char*>(malloc(PACKET_LEN));
-            strcpy(cpy, msg);
+            if (p == id) // skip myself
+              continue;
+            char* cpy = static_cast<char*>(malloc(strlen(msg) + 1));
+            std::strcpy(cpy, msg);
             pf.send(msg_id, cpy, p); // might be better just to have no interleaving
         }
         free(msg);
