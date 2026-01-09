@@ -81,7 +81,7 @@ class URB {
         unsigned char sender = static_cast<unsigned char>(*ptr - '0');
         unsigned int msg_id = static_cast<unsigned int>(strtoul(ptr+1, &ptr, 16));
         ptr++;
-        if (OO >= 3)
+        if (OO >= 4)
             std::cout << "urb_r " << static_cast<short>(sender) << "-" << msg_id << std::endl;
 
         if (ack[sender].find(msg_id) == ack[sender].end()) {

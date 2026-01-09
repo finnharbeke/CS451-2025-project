@@ -29,7 +29,7 @@ class FairLoss {
 
     bool send(char* msg, struct sockaddr_in* dest) {
 
-      if (OO >= 5) {
+      if (OO >= 6) {
         std::cout << "fl_s sending buffer '" << msg << "'\n";
       }
 
@@ -62,7 +62,7 @@ class FairLoss {
       char* buffer = static_cast<char*>(malloc(MAX_RECVD));
       
       while (true) {
-        if (OO >= 5) std::cout << "fl listening..." << std::endl;
+        if (OO >= 6) std::cout << "fl listening..." << std::endl;
         msg_len = recvfrom(sock, buffer, MAX_RECVD, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0 || msg_len > MAX_RECVD) {
           perror("reading error...\n");
@@ -71,7 +71,7 @@ class FairLoss {
           // exit(-1);
         } else {
           buffer[msg_len] = '\0';  // add null terminator
-          if (OO >= 5) std::cout << "fl_r " << buffer << std::endl;
+          if (OO >= 6) std::cout << "fl_r " << buffer << std::endl;
           recv++;
           char* msg = static_cast<char*>(malloc(std::strlen(buffer) + 1));
           std::strcpy(msg, buffer);
@@ -89,7 +89,7 @@ class FairLoss {
         char* msg;
         bool succeeded = msg_queue.try_dequeue(msg);
         if (!succeeded) {
-          if (OO >= 4) std::cout << "sleep in receive" << std::endl;
+          if (OO >= 5) std::cout << "sleep in receive" << std::endl;
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
           continue;
         }

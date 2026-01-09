@@ -101,19 +101,14 @@ public:
               << 1000.0 * static_cast<double>(c_end - c_start) / CLOCKS_PER_SEC << ","
               << std::chrono::duration<double, std::milli>(t_end - t_start).count() << ","
               << getCurrentRAM() << ","
-              << seq_nr - last_seq_nr << ","
-              << log_r - last_log_r << ",";
+              << logged - last_logged << ",";
 
-    last_seq_nr = seq_nr;
-    last_log_r = log_r;
+    last_logged = logged;
   }
 
   void decide(unsigned int slot, std::set<unsigned int>* value)
   {
-    // receives message formatted as
-    // seq_nr | seq_nr | seq_nr ...
-    // auto seq_nrs = codec::recover_seqnrs(msg);
-    if (OO >= 4)
+    if (OO >= 2)
       std::cout << "logging decision " << slot << std::endl;
     auto it = value->cbegin();
     const auto end = value->cend();
@@ -124,6 +119,7 @@ public:
     }
     buffer += '\n';
     check_buffer();
+    logged++;
   }
 
   void check_buffer()
@@ -141,16 +137,13 @@ private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
   LatticeAgreement network;
-  unsigned int seq_nr = 1;
-  unsigned int msg_count = 1;
-  unsigned int log_r = 0;
+  unsigned int logged = 0;
   std::string buffer;
   std::mutex outmutx;
   std::ofstream out;
 
   const std::clock_t c_start = std::clock();
   const std::chrono::time_point<std::chrono::high_resolution_clock> t_start = std::chrono::high_resolution_clock::now();
-  unsigned int last_seq_nr = seq_nr;
-  unsigned int last_log_r = log_r;
+  unsigned int last_logged = logged;
   unsigned int stats_round = 0;
 };

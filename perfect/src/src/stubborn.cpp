@@ -160,7 +160,7 @@ class Stubborn {
         std::unique_lock<std::mutex> lock(Q_mutx);
         Q.insert(stbmsg);
       }
-      if (OO >= 3) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
+      if (OO >= 4) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
       fl.send(stbmsg.msg, &(*addrs)[stbmsg.dest]);
       sent++;
       
@@ -183,7 +183,7 @@ class Stubborn {
     }
 
     void receive(char* buffer) {
-      if (OO >= 4) std::cout << "st got smth" << std::endl;
+      if (OO >= 5) std::cout << "st got smth" << std::endl;
       recv++;
       unsigned char sender = static_cast<unsigned char>(*buffer - '0');
       
@@ -229,10 +229,10 @@ class Stubborn {
       unsigned long timestamp_ul = strtoul(msg, &msg, 16);
       // std::cout << msg_id << " " << timestamp_ul << std::endl;
       msg++;
-      if (OO >= 3)
+      if (OO >= 4)
         std::cout << "st_r " << static_cast<short>(sender)  << " " << msg_id << std::endl;
       if (timestamp_ul < cutoffs[sender]) {
-        if (OO >= 3)
+        if (OO >= 4)
           std::cout << timestamp_ul << " vs " << cutoffs[sender] << std::endl;
         return;
       }
@@ -264,23 +264,23 @@ class Stubborn {
           sockaddr_in* dest = &(*addrs)[sender];
           // lock for erases
           auto view = tree.readView();
-          if (OO >= 1) std::cout << "acking to "<< static_cast<short>(sender) << ": {";
+          if (OO >= 3) std::cout << "acking to "<< static_cast<short>(sender) << ": {";
           for (auto& iv : view) {
             char* msg = compose_ack(sender, iv);
-            if (OO >= 1) std::cout << "[" << iv.left << "," << iv.right << "], ";
+            if (OO >= 3) std::cout << "[" << iv.left << "," << iv.right << "], ";
             
             s_ack++;
             fl.send(msg, dest);
             free(msg);
           };
-          if (OO >= 1) std::cout << "}" << std::endl;
+          if (OO >= 3) std::cout << "}" << std::endl;
           // unlock
         }
       }
     }
 
     char* compose_ack(unsigned char sender, Interval inter) {
-      if (OO >= 4)
+      if (OO >= 5)
         std::cout << "composing ack to " << static_cast<short>(sender)
         << ", [" << inter.left << "," << inter.right << "]" << std::endl;
       
@@ -313,7 +313,7 @@ class Stubborn {
       sep++;
       unsigned long right = strtoul(sep, &sep, 16);
       
-      if (OO >= 1)
+      if (OO >= 3)
       std::cout << "st_r_a " << static_cast<short>(sender) << ": ["
       << left << ", " << right << "]" << std::endl;
       
@@ -321,7 +321,7 @@ class Stubborn {
       {
         std::lock_guard<std::mutex> lock(ackedset_mutxs[sender]);
         for (auto msg_id = left; msg_id <= right; msg_id++) {
-          if (OO >= 4)
+          if (OO >= 5)
             std::cout << "removing from sending to " << sender + '0' << ": " << msg_id << std::endl;
           // remove msg_id from sending
           acked[sender].emplace(msg_id);
@@ -365,7 +365,7 @@ class Stubborn {
       unsigned long left = strtoul(head, &head, 16);
       head++;
       unsigned long right = strtoul(head, nullptr, 16);
-      if (OO >= 1)
+      if (OO >= 3)
         std::cout << "st_r_aa " << static_cast<short>(sender) << ": ["
           << left << "," << right << "]" << std::endl;
 

@@ -137,8 +137,8 @@ class LatticeAgreementValidation:
         maxint = 2**31 - 1
         seeded_rand = random.Random(42)
         try:
-            # values = seeded_rand.sample(range(0, maxint + 1), self.dval)
-            values = seeded_rand.sample(range(0, self.dval), self.dval)
+            values = seeded_rand.sample(range(0, maxint + 1), self.dval)
+            # values = seeded_rand.sample(range(0, self.dval), self.dval)
         except ValueError:
             print("Cannot have to many distinct values")
             sys.exit(1)

@@ -5,17 +5,19 @@
 
 // verbosity
 // 0 - nothing
-// 1 - non-msg_triggered &  std::cerr
+// 1 - setup/close & heartbeats & std::cerr
 // 2 - agreement things
-// 3 - crucial msg triggers: stubborn receives & sends
-// 4 - other msg triggers
-// 5 - msg contents
-const unsigned char OO = 2;
+// 3 - ack things
+// 4 - crucial msg triggers: stubborn receives & sends
+// 5 - other msg triggers
+// 6 - msg contents
+const unsigned char OO = 0;
 const bool STATS = 1;
 
 const unsigned short MAX_DS = 1000;
 const unsigned short MAX_VS = 100;
 const unsigned int SLOTS_AHEAD = 10;
+const unsigned int MAX_ACTIVE_WINDOW = 20;
 
 const unsigned long LOGBUFSIZE = 1 << 18; // 1/4 MiB, so for 128 proc, 32 MiB
 const unsigned long LOGLINE_MAXLEN = MAX_DS * 11; // 2^32-1 is 10 digits, plus space

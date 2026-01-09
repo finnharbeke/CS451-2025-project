@@ -106,7 +106,7 @@ class FIFO {
                 std::cout << m << ' ';
             std::cout << "}\n";
         };
-        if (OO >= 4)
+        if (OO >= 5)
             print();
         
         while (next[urb_sender] == top->msg_id) {
@@ -115,7 +115,7 @@ class FIFO {
             next[urb_sender]++;
             top = pending[urb_sender].erase(top);
 
-            if (OO >= 4)
+            if (OO >= 5)
                 print();
         }
     }
