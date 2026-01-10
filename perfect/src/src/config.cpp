@@ -5,7 +5,8 @@
 #include <sstream>
 #include <string>
 
-#include <set>
+#include <vector>
+#include <algorithm>
 struct PerfectConfig {
     public:
         unsigned long m, i;
@@ -46,7 +47,7 @@ struct FIFOConfig {
 
 class LatticeConfig {
     public:
-        unsigned int p;
+        unsigned int n;
         unsigned char vs;
         unsigned short ds;
         std::vector<std::vector<int>> proposals; 
@@ -59,7 +60,7 @@ class LatticeConfig {
             throw std::invalid_argument(os.str());
         }
         
-        if (!(configFile >> p >> vs >> ds)) {
+        if (!(configFile >> n >> vs >> ds)) {
             std::ostringstream os;
             os << "Parsing for `" << configPath << "` failed.";
             throw std::invalid_argument(os.str());
@@ -71,19 +72,20 @@ class LatticeConfig {
         closed = false;
     }
 
-    std::set<unsigned int>* next_proposal() {
+    void next_proposal(std::vector<unsigned int>& proposal) {
+        proposal.clear();
         if (closed) {
-            return new std::set<unsigned int>();
+            return;
         }
         std::string line;
         std::getline(configFile, line);
         std::istringstream iss(line);
-        auto vec = new std::set<unsigned int>();
         unsigned int x;
         while (iss >> x) {
-            vec->emplace(x);
+            proposal.push_back(x);
         }
-        return vec;
+        std::sort(proposal.begin(), proposal.end());
+        return;
     }
 
     private:

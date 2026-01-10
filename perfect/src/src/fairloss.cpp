@@ -66,7 +66,7 @@ class FairLoss {
         msg_len = recvfrom(sock, buffer, MAX_RECVD, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (msg_len < 0 || msg_len > MAX_RECVD) {
           perror("reading error...\n");
-          if (OO >= 1) std::cerr << "weird msg_len: " << msg_len << " buffer " << buffer << std::endl;
+          std::cerr << "weird msg_len: " << msg_len << " buffer " << buffer << std::endl;
           // close(sock);
           // exit(-1);
         } else {

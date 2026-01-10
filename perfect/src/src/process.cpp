@@ -69,12 +69,9 @@ public:
   {
     if (OO >= 1)
       std::cout << "closing" << std::endl;
-    {
-      std::lock_guard lock(outmutx);
-      out << buffer;
-      out.flush();
-      out.close();
-    }
+    out << buffer;
+    out.flush();
+    out.close();
   }
 
   void keep_stats()
@@ -106,30 +103,29 @@ public:
     last_logged = logged;
   }
 
-  void decide(unsigned int slot, std::set<unsigned int>* value)
+  void decide(unsigned int slot, std::vector<unsigned int>& value)
   {
     if (OO >= 2)
       std::cout << "logging decision " << slot << std::endl;
-    auto it = value->cbegin();
-    const auto end = value->cend();
+    auto it = value.begin();
+    const auto end = value.end();
     if (it != end)
       buffer += std::to_string(*it++);
     while (it != end) {
       buffer += " " + std::to_string(*it++);
     }
     buffer += '\n';
+    decs_in_buf++;
     check_buffer();
     logged++;
   }
 
   void check_buffer()
   {
-    if (buffer.size() >= LOG_CAP) {
-      {
-        std::lock_guard lock(outmutx);
-        out << buffer;
-      }
+    if (decs_in_buf >= MAX_DECS_IN_BUF || buffer.size() >= LOG_CAP) {
+      out << buffer;
       buffer.clear();
+      decs_in_buf = 0;
     }
   }
 
@@ -139,8 +135,8 @@ private:
   LatticeAgreement network;
   unsigned int logged = 0;
   std::string buffer;
-  std::mutex outmutx;
   std::ofstream out;
+  unsigned int decs_in_buf = 0;
 
   const std::clock_t c_start = std::clock();
   const std::chrono::time_point<std::chrono::high_resolution_clock> t_start = std::chrono::high_resolution_clock::now();

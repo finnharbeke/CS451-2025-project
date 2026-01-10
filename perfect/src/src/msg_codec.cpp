@@ -45,10 +45,10 @@ namespace codec
         return b;
     }
 
-    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
-    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal);
+    char* compose_agreement_msg(char marker, bool with_set, unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal) {
         char* msg = static_cast<char*>(malloc(
-            PACKET_HEADER_LEN + (with_set ? proposal->size() * (_CMPRSD_S+1) : 0)
+            PACKET_HEADER_LEN + (with_set ? proposal.size() * (_CMPRSD_S+1) : 0)
         ));
         char* ptr = msg;
 
@@ -61,7 +61,7 @@ namespace codec
         *ptr++ = static_cast<char>(round + '0');
         ptr += snprintf(ptr, _CMPRSD_S + 1, "%x", p_id);
         if (with_set) {
-            for (auto x : *proposal) {
+            for (auto x : proposal) {
                 *ptr++ = 31;
                 ptr += snprintf(ptr, _CMPRSD_S + 1, "%x", x);
             }
@@ -71,16 +71,17 @@ namespace codec
         return msg;
     }
     
-    char* compose_proposal(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
-    char* compose_proposal(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+    char* compose_proposal(unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal);
+    char* compose_proposal(unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal) {
         return compose_agreement_msg(5, true, p_id, round, proposal);
     }
     char* compose_ack(unsigned int p_id, unsigned char round);
     char* compose_ack(unsigned int p_id, unsigned char round) {
-        return compose_agreement_msg(6, false, p_id, round, nullptr);
+        std::vector<unsigned int> empty;
+        return compose_agreement_msg(6, false, p_id, round, empty);
     }
-    char* compose_nak(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal);
-    char* compose_nak(unsigned int p_id, unsigned char round, std::set<unsigned int>* proposal) {
+    char* compose_nak(unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal);
+    char* compose_nak(unsigned int p_id, unsigned char round, std::vector<unsigned int>& proposal) {
         return compose_agreement_msg(21, true, p_id, round, proposal);
     }
 

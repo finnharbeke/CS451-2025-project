@@ -4,22 +4,33 @@
 #include <atomic>
 
 // verbosity
-// 0 - nothing
-// 1 - setup/close & heartbeats & std::cerr
+// 0 - nothing but cerr
+// 1 - setup/close & heartbeats
 // 2 - agreement things
 // 3 - ack things
 // 4 - crucial msg triggers: stubborn receives & sends
 // 5 - other msg triggers
 // 6 - msg contents
 const unsigned char OO = 0;
-const bool STATS = 1;
+const bool STATS = 0;
 
 const unsigned short MAX_DS = 1000;
 const unsigned short MAX_VS = 100;
 const unsigned int SLOTS_AHEAD = 10;
 const unsigned int MAX_ACTIVE_WINDOW = 20;
 
+const unsigned int CHECK_ON_UNANSWERED_MILLIS = 100;
+const unsigned int RETRY_UNANSWERED_MILLIS = 200; // 200
+
+const unsigned int SWEEP_AFTER = 500;
+// space of unswept: at most ds * 4 bytes for numbers
+// but also like total 40 bytes overhead with pointers
+// so could be 40 KB per set, 120 KB per shot
+const unsigned int MAX_DECS_IN_BUF = SWEEP_AFTER * 3 / 4;
+
+
 const unsigned long LOGBUFSIZE = 1 << 18; // 1/4 MiB, so for 128 proc, 32 MiB
+// 11 * ds bytes per line, ≤1.1KB, so you have like 200+ decisions
 const unsigned long LOGLINE_MAXLEN = MAX_DS * 11; // 2^32-1 is 10 digits, plus space
 const unsigned long LOG_CAP = LOGBUFSIZE - LOGLINE_MAXLEN; // when to flush
 const unsigned long RCVBUFSIZE = 1 << 15; // 32 KiB, so for 128 proc, 2MiB

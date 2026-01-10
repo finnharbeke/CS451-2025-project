@@ -10,7 +10,7 @@ def collect(p, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,logged,decided,agr_rounds,window_top,window_bot,beb_s,beb_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,fl_s,fl_r,fl_rq,msgs_in_q\n"
+            "pid,round,cpu,wc,ram,logged,decided,agr_rounds,restarts,loaded_tail,active_tail,active_front,loaded_front,beb_s,beb_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,fl_s,fl_r,fl_rq,msgs_in_q\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -77,15 +77,19 @@ if __name__ == "__main__":
     
     rounds_mean = df[df['round'] <= df['round'].max()/2]['agr_rounds'].mean()
     dec_mean = df[df['round'] <= df['round'].max()/2]['decided'].mean()
+    re_mean = df[df['round'] <= df['round'].max()/2]['restarts'].mean()
     sns.lineplot(data=df, x='round', y='agr_rounds')
     sns.lineplot(data=df, x='round', y='decided')
-    plt.title(f'mean dec: {dec_mean:.0f}, mean rnds: {rounds_mean:.0f}')
+    sns.lineplot(data=df, x='round', y='restarts')
+    plt.title(f'mean dec: {dec_mean:.0f}, mean rnds: {rounds_mean:.0f}, mean restarts: {re_mean:.0f}')
     plt.savefig(os.path.join(out_dir, f'{p}-{n}-{vs}-{ds}-AGRMNT.png'))
     plt.clf()
     
-    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='window_bot', hue='pid', palette='pastel')
-    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='window_top', hue='pid', palette='deep', legend=False)
-    plt.title(f'mean dec: {dec_mean:.0f}, mean rnds: {rounds_mean:.0f}')
+    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='loaded_tail', hue='pid', palette='deep')
+    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='active_tail', hue='pid', palette='pastel', legend=False)
+    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='active_front', hue='pid', palette='pastel', legend=False)
+    sns.lineplot(data=df[df['pid'] <= 10], x='round', y='loaded_front', hue='pid', palette='deep', legend=False)
+    plt.title('window')
     plt.savefig(os.path.join(out_dir, f'{p}-{n}-{vs}-{ds}-WINDOW.png'))
     # plt.show()
     plt.clf()

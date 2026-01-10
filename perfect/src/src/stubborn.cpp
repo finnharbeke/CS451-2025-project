@@ -201,8 +201,8 @@ class Stubborn {
         {
           std::lock_guard lock(hb_mutx);
           last_seen[sender] = std::chrono::steady_clock::now();
-          if (OO >= 1)
-            std::cout << "process " << static_cast<short>(sender) << " alive!" << std::endl;
+          // if (OO >= 1)
+          //   std::cout << "process " << static_cast<short>(sender) << " alive!" << std::endl;
           if (suspected[sender] == true) {
             if (OO >= 1)
               std::cout << static_cast<short>(sender) << " came back from the dead" << std::endl;
@@ -246,7 +246,7 @@ class Stubborn {
 
     void add_to_ack(unsigned char sender, unsigned long msg_id) {
       // std::lock_guard<std::mutex> lock(ack_mutx);
-      if (!pending_acks[sender].insert(msg_id) && OO >= 1)
+      if (!pending_acks[sender].insert(msg_id))
         std::cerr << "ack insertion failed: " << msg_id << " on sender " << static_cast<short>(sender) << std::endl;
     }
 
