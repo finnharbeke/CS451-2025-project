@@ -12,20 +12,19 @@
 // 5 - other msg triggers
 // 6 - msg contents
 const unsigned char OO = 0;
-const bool STATS = 0;
+const bool STATS = 1;
 
 const unsigned short MAX_DS = 1000;
 const unsigned short MAX_VS = 100;
 const unsigned int SLOTS_AHEAD = 10;
-const unsigned int MAX_ACTIVE_WINDOW = 20;
+unsigned int MAX_ACTIVE_WINDOW = 30;
 
 const unsigned int CHECK_ON_UNANSWERED_MILLIS = 100;
-const unsigned int RETRY_UNANSWERED_MILLIS = 200; // 200
+unsigned int RETRY_UNANSWERED_MILLIS = 200; // 200
 
 const unsigned int SWEEP_AFTER = 500;
 // space of unswept: at most ds * 4 bytes for numbers
-// but also like total 40 bytes overhead with pointers
-// so could be 40 KB per set, 120 KB per shot
+// so could be 4 KB per vec, 12 KB per shot * 500 is say 1MB
 const unsigned int MAX_DECS_IN_BUF = SWEEP_AFTER * 3 / 4;
 
 
@@ -33,13 +32,13 @@ const unsigned long LOGBUFSIZE = 1 << 18; // 1/4 MiB, so for 128 proc, 32 MiB
 // 11 * ds bytes per line, ≤1.1KB, so you have like 200+ decisions
 const unsigned long LOGLINE_MAXLEN = MAX_DS * 11; // 2^32-1 is 10 digits, plus space
 const unsigned long LOG_CAP = LOGBUFSIZE - LOGLINE_MAXLEN; // when to flush
-const unsigned long RCVBUFSIZE = 1 << 15; // 32 KiB, so for 128 proc, 2MiB
+const unsigned long RCVBUFSIZE = 1 << 15; // 64 KiB, so for 128 proc, 4MiB
 const unsigned long MSGQSIZE = 1 << 10; // 1024 msgs in queue at a time
 
 const unsigned long MAX_PENDING = 2048; // messages in queue at a time
-const unsigned long REFILL = 768; // when to start sending again
+const unsigned long REFILL = 1024; // when to start sending again
 const unsigned long SEND_BURST = 256;
-const unsigned char INIT_BACKOFF = 4; // 2^4 ms init time to back off
+unsigned char INIT_BACKOFF = 7; // 128 ms init time to back off
 const unsigned char MAX_BACKOFF = 10; // 2^10 ms ~1s max time to back off
 const unsigned long ACK_INTERVAL_MILLIS = 100;
 

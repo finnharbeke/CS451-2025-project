@@ -117,6 +117,7 @@ class LatticeAgreement {
     }
 
     void new_round(unsigned int p_id) {
+        // owns mutx
         auto shot = shots[p_id];
         shot->round++;
         
@@ -145,6 +146,7 @@ class LatticeAgreement {
     }
 
     void restart_round(unsigned int p_id) {
+        // owns mutx
         restarts++;
         auto shot = shots[p_id];
 
@@ -166,23 +168,21 @@ class LatticeAgreement {
     }
 
     bool start_batch() {
-        {
-            std::lock_guard<std::mutex> lock(window_shots_mutx);
-            if (wd.active_front > config->n)
-                return true;
-    
-            while (wd.loaded_front - wd.active_front < SLOTS_AHEAD + 1
-                && wd.loaded_front <= config->n) {
-                    
-                SingleShot* shot = new SingleShot;
-                shot->accepted.reserve(config->vs);
-                config->next_proposal(shot->accepted);
+        std::lock_guard<std::mutex> lock(window_shots_mutx);
+        if (wd.active_front > config->n)
+            return true;
+
+        while (wd.loaded_front - wd.active_front < SLOTS_AHEAD + 1
+            && wd.loaded_front <= config->n) {
                 
-                shots[wd.loaded_front] = shot;
-                wd.loaded_front++;
-                if (wd.loaded_tail == 0) // first time
-                    wd.loaded_tail++;
-            }
+            SingleShot* shot = new SingleShot;
+            shot->accepted.reserve(config->vs);
+            config->next_proposal(shot->accepted);
+            
+            shots[wd.loaded_front] = shot;
+            wd.loaded_front++;
+            if (wd.loaded_tail == 0) // first time
+                wd.loaded_tail++;
         }
             
         auto to_start = wd.active_front++;
@@ -222,12 +222,17 @@ class LatticeAgreement {
 
     void await_for_more_and_check_unanswered() {
         std::unique_lock<std::mutex> lock(window_shots_mutx);
-        cv_window.wait_for(lock,
-            std::chrono::milliseconds(CHECK_ON_UNANSWERED_MILLIS), [&]{
-
-            check_on_unanswered();
-            return wd.active_front - wd.active_tail < MAX_ACTIVE_WINDOW;
-        });
+        bool ready = false;
+        while (!ready) {
+            cv_window.wait_for(lock,
+                std::chrono::milliseconds(CHECK_ON_UNANSWERED_MILLIS), [&]{
+    
+                check_on_unanswered();
+                return wd.active_front - wd.active_tail < MAX_ACTIVE_WINDOW;
+            });
+            ready = wd.active_front - wd.active_tail < MAX_ACTIVE_WINDOW;
+            // beb.await_ready_for_more();
+        }
     }
 
     // void send(char* msg) {
@@ -278,18 +283,12 @@ class LatticeAgreement {
             }
         }
 
-        std::unordered_map<unsigned int, SingleShot *>::iterator it;
-        {
-            std::lock_guard<std::mutex> lock(window_shots_mutx);
-            it = shots.find(p_id);
-        }
-        if (it == shots.end()) {
+        std::unique_lock<std::mutex> lock(window_shots_mutx);
+        auto it = shots.find(p_id);
+        auto end = shots.end();
+        if (it == end) {
             // WHAT IF I HAVEN'T ARRIVED IN THIS P_ID YET!
-            bool too_far;
-            {
-                std::lock_guard<std::mutex> lock(window_shots_mutx);
-                too_far = p_id >= wd.loaded_front;
-            }
+            bool too_far = p_id >= wd.loaded_front;
             if (too_far) {
                 // sorry not ready for you
                 if (msg_type == 5) {
@@ -363,28 +362,24 @@ class LatticeAgreement {
                     decided++;
                     if (OO >= 2)
                         std::cout << "deciding " << p_id << "!" << std::endl;
-                    {
-                        std::lock_guard<std::mutex> lock(window_shots_mutx);
-                        if (p_id == wd.active_tail) {
-                            while (wd.active_tail < wd.loaded_front &&
-                                shots[wd.active_tail]->decided) {
-    
-                                decide(wd.active_tail, shots[wd.active_tail]->learned);
-                                wd.active_tail++;
-                                // such that there are exactly sweep_after many in tail
-                                if (wd.active_tail - wd.loaded_tail > SWEEP_AFTER) {
-                                    auto old = shots.find(wd.loaded_tail);
-                                    // delete old->second->accepted;
-                                    // delete old->second->learned;
-                                    // delete old->second->Vr;
-                                    delete old->second;
-                                    shots.erase(old);
-                                    wd.loaded_tail++;
-                                }
+                    if (p_id == wd.active_tail) {
+                        while (wd.active_tail < wd.loaded_front &&
+                            shots[wd.active_tail]->decided) {
+
+                            decide(wd.active_tail, shots[wd.active_tail]->learned);
+                            wd.active_tail++;
+                            // such that there are exactly sweep_after many in tail
+                            if (wd.active_tail - wd.loaded_tail > SWEEP_AFTER) {
+                                auto old = shots.find(wd.loaded_tail);
+                                // delete old->second->accepted;
+                                // delete old->second->learned;
+                                // delete old->second->Vr;
+                                delete old->second;
+                                shots.erase(old);
+                                wd.loaded_tail++;
                             }
                         }
                     }
-                    cv_window.notify_one();
                 } else
                     new_round(p_id);
             }
@@ -414,6 +409,9 @@ class LatticeAgreement {
                 beb.sendto(msg, sender);
             }
         }
+
+        lock.unlock();
+        cv_window.notify_one();
     }
 
   private:

@@ -47,15 +47,17 @@ class BEB {
     }
 
     void stats() {
-      std::cout << sent - last_sent << "," << recv - last_recv << ",";
+      std::cout << sent - last_sent << "," << direct - last_direct << "," << recv - last_recv << ",";
       pf.stats();
       last_sent = sent;
+      last_direct= direct;
       last_recv = recv;
     }
 
     void sendto(char* msg, unsigned char p) {
       auto msg_id = msg_id_counter++;
       codec::add_beb_msg_sender_n_id_n_ts(msg, id, msg_id);
+      direct++;
       pf.send(msg_id, msg, p);
     }
 
@@ -92,8 +94,10 @@ class BEB {
     
     unsigned long msg_id_counter = 1;
     unsigned long sent = 0;
+    unsigned long direct = 0;
     unsigned long recv = 0;
-
+    
     unsigned long last_sent = 0;
+    unsigned long last_direct = 0;
     unsigned long last_recv = 0;
 };

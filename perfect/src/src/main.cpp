@@ -92,6 +92,43 @@ int main(int argc, char **argv) {
     addrs[static_cast<unsigned char>(host.id)] = addr;
   }
 
+  switch (n) {
+    case 1:
+    case 2:
+      MAX_ACTIVE_WINDOW = 50;
+      INIT_BACKOFF = 4;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 3:
+      MAX_ACTIVE_WINDOW = 40;
+      INIT_BACKOFF = 4;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 4:
+    case 5:
+      MAX_ACTIVE_WINDOW = 30;
+      INIT_BACKOFF = 5;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 6:
+    case 7:
+    case 8:
+      MAX_ACTIVE_WINDOW = 20;
+      INIT_BACKOFF = 6;
+      RETRY_UNANSWERED_MILLIS = 200;
+      break;
+    case 9:
+    case 10:
+      MAX_ACTIVE_WINDOW = 15;
+      INIT_BACKOFF = 6;
+      RETRY_UNANSWERED_MILLIS = 250;
+      break;
+    default:
+      MAX_ACTIVE_WINDOW = 250 / n;
+      INIT_BACKOFF = 7;
+      RETRY_UNANSWERED_MILLIS = 400;
+  }
+
   // std::ios_base::sync_with_stdio(false);
   // std::cin.tie(nullptr);
   if (OO >= 1) std::cout << "Broadcasting and delivering messages...\n\n";

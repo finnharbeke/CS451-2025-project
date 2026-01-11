@@ -70,12 +70,20 @@ class Stubborn {
         a += s_acked.size();
       }
       size_t l = lookup.size();
+      size_t q = Q.size();
+      size_t sus = 0;
+      {
+        std::lock_guard lock(hb_mutx);
+        for (auto& [sender, susp_vec] : suspended) {
+          a += susp_vec.size();
+        }
+      }
 
       std::cout << sent - last_sent << "," << send_cycles - last_send_cycles << ","
         << s_ack - last_s_ack << "," << r_ack - last_r_ack << ","
         << ack_cycles - last_ack_cycles << "," << r_msg - last_r_msg << ","
         << recv - last_recv << "," << s_ackack - last_s_ackack << ","
-        << r_ackack - last_r_ackack << "," << l << "," << a << "," << pa << ",";
+        << r_ackack - last_r_ackack << "," << l << "," << a << "," << pa << "," << q << "," << sus << ",";
       
       last_sent = sent;
       last_send_cycles = send_cycles;

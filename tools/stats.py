@@ -10,7 +10,7 @@ def collect(p, out_path):
 
     with open(out_path, "w") as outfile:
         outfile.writelines([
-            "pid,round,cpu,wc,ram,logged,decided,agr_rounds,restarts,loaded_tail,active_tail,active_front,loaded_front,beb_s,beb_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,fl_s,fl_r,fl_rq,msgs_in_q\n"
+            "pid,round,cpu,wc,ram,logged,decided,agr_rounds,restarts,loaded_tail,active_tail,active_front,loaded_front,beb_bc,beb_dir,beb_r,pf_s,pf_r,sent,s_cyc,ack_s,ack_r,ack_cyc,recv,recvtot,aas,aar,lookup_size,acked_size,p_acks_size,send_q_size,susp_size,fl_s,fl_r,fl_rq,receive_q_size\n"
         ])
 
         for in_path in os.listdir(outputs):
@@ -91,6 +91,17 @@ if __name__ == "__main__":
     sns.lineplot(data=df[df['pid'] <= 10], x='round', y='loaded_front', hue='pid', palette='deep', legend=False)
     plt.title('window')
     plt.savefig(os.path.join(out_dir, f'{p}-{n}-{vs}-{ds}-WINDOW.png'))
+    # plt.show()
+    plt.clf()
+    
+    sns.lineplot(data=df, x='round', y='send_q_size', label='send Q')
+    sns.lineplot(data=df, x='round', y='receive_q_size', label='recv Q')
+    sns.lineplot(data=df, x='round', y='lookup_size', label='lookup')
+    sns.lineplot(data=df, x='round', y='acked_size', label='acked')
+    sns.lineplot(data=df, x='round', y='p_acks_size', label='pending acks')
+    sns.lineplot(data=df, x='round', y='susp_size', label='suspended packets')
+    plt.title('window')
+    plt.savefig(os.path.join(out_dir, f'{p}-{n}-{vs}-{ds}-DS.png'))
     # plt.show()
     plt.clf()
 
