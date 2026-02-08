@@ -17,16 +17,17 @@
 
 #include "global.h"
 #include "fairloss.cpp"
+#include "msg_codec.cpp"
 #include "interval_tree.cpp"
 #include "msg_codec.cpp"
 
 struct StubbornMsg {
-  unsigned int msg_id;
+  unsigned long msg_id;
   char* msg;
-  struct sockaddr_in* dest;
+  unsigned char dest;
   std::chrono::system_clock::time_point next_send;
   unsigned char back_off = INIT_BACKOFF;
-  StubbornMsg(unsigned int msg_id, char* msg, sockaddr_in* dest) :
+  StubbornMsg(unsigned long msg_id, char* msg, unsigned char dest) :
     msg_id(msg_id), msg(msg), dest(dest),
     next_send(std::chrono::system_clock::now()) {}
 
@@ -41,24 +42,49 @@ struct StubbornMsg {
 
 class Stubborn {
   public:
-    Stubborn(unsigned char id_,
-      std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<bool()> application_send
+    Stubborn(unsigned char id_, std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
+      std::function<void(unsigned char, char*)> app_receive
     )
-    : id(id_), addrs(addrs_), app_send(application_send) {
+    : id(id_), addrs(addrs_), 
+      fl(FairLoss(std::bind(&Stubborn::receive, this, std::placeholders::_1))),
+      app_receive(app_receive) {
       for (auto& [sender, _]: *addrs) {
-        if (sender == id) continue;
         pending_acks.try_emplace(sender); // constructs default IT inplace
+        acked.try_emplace(sender);
+        ackedset_mutxs.try_emplace(sender);
         cutoffs[sender] = 0;
+        
+        suspected[sender] = false;
+        last_seen[sender] = std::chrono::steady_clock::now();
+        suspended.try_emplace(sender);
       }
     }
 
     void stats() {
+      size_t pa = 0;
+      for (auto& [sender, IT] : pending_acks) {
+        pa += IT.size();
+      }
+      size_t a = 0;
+      for (auto& [sender, s_acked] : acked) {
+        std::lock_guard lock(ackedset_mutxs[sender]);
+        a += s_acked.size();
+      }
+      size_t l = lookup.size();
+      size_t q = Q.size();
+      size_t sus = 0;
+      {
+        std::lock_guard lock(hb_mutx);
+        for (auto& [sender, susp_vec] : suspended) {
+          a += susp_vec.size();
+        }
+      }
+
       std::cout << sent - last_sent << "," << send_cycles - last_send_cycles << ","
         << s_ack - last_s_ack << "," << r_ack - last_r_ack << ","
         << ack_cycles - last_ack_cycles << "," << r_msg - last_r_msg << ","
         << recv - last_recv << "," << s_ackack - last_s_ackack << ","
-        << r_ackack - last_r_ackack << "," << lookup.size() << ",";
+        << r_ackack - last_r_ackack << "," << l << "," << a << "," << pa << "," << q << "," << sus << ",";
       
       last_sent = sent;
       last_send_cycles = send_cycles;
@@ -72,13 +98,13 @@ class Stubborn {
       fl.stats();
     }
 
-    void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
+    void send(unsigned long msg_id, char* msg, unsigned char dest) {
       std::lock_guard<std::mutex> lock(Q_mutx);
       Q.emplace(msg_id, msg, dest);
       cv_empty.notify_one();
     }
 
-    void send_messages() {
+    void sendWorker() {
       if (OO >= 1) std::cout << "running stubborn" << std::endl;
       bool finished = false;
       while (true) {
@@ -98,97 +124,133 @@ class Stubborn {
     void next() { // guaranteed non-empty queue
 
       std::chrono::system_clock::time_point until;
-      until = (*Q.begin()).next_send;
+      {
+        std::unique_lock<std::mutex> lock(Q_mutx);
+        cv_empty.wait(lock, [&]{
+          // if (resumed_flag.load()) return true;   // break wait after SIGCONT
+          return !Q.empty();
+        });
+        until = (*Q.begin()).next_send;
+      }
 
       // sleep
       std::this_thread::sleep_until(until);
       
-      StubbornMsg stbmsg = StubbornMsg(0, nullptr, nullptr);
-      auto top = Q.begin();
-      stbmsg = *top;
-      Q.erase(top);
-      auto it = acked.find(stbmsg.msg_id);
-      if (it != acked.end()) {
-        // old message, throw out
-        {
-          std::lock_guard<std::mutex> lock(ackedset_mutx);
-          acked.erase(it);
+      StubbornMsg stbmsg = StubbornMsg(0, nullptr, 0);
+      {
+        std::unique_lock<std::mutex> lock(Q_mutx);
+        auto top = Q.begin();
+        stbmsg = *top;
+        Q.erase(top);
+      }
+      {
+        std::lock_guard lock(hb_mutx);
+        if (suspected[stbmsg.dest]) {
+          // go away
+          suspended[stbmsg.dest].push_back(stbmsg);
+          cv_ready.notify_one();
+          return;
         }
-        stbmsg.free_msg();
-        return;
+      }
+
+      std::chrono::system_clock::time_point now;
+      {
+        now = std::chrono::system_clock::now();
+        std::unique_lock<std::mutex> lock(ackedset_mutxs[stbmsg.dest]);
+        auto it = acked[stbmsg.dest].find(stbmsg.msg_id);
+        if (it != acked[stbmsg.dest].end()) {
+        // old message, throw out
+          acked[stbmsg.dest].erase(it);
+          stbmsg.free_msg();
+          cv_ready.notify_one(); // Q size decreased
+          return;
+        }
       }
       
-      std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-      
-      codec::adjust_timestamp(stbmsg.msg, now);
+      // adjust timestamp
+      codec::add_timestamp(stbmsg.msg, now);
 
       stbmsg.next_send = now + std::chrono::milliseconds(1 << stbmsg.back_off);
       if (stbmsg.back_off < MAX_BACKOFF)
         stbmsg.back_off++;
 
-      Q.insert(stbmsg);
-      if (OO >= 2)
-        std::cout << "st_s " << stbmsg.msg_id << std::endl;
-      fl.send(stbmsg.msg, stbmsg.dest);
+      {
+        std::unique_lock<std::mutex> lock(Q_mutx);
+        Q.insert(stbmsg);
+      }
+      if (OO >= 4) std::cout << "st_s " << stbmsg.msg_id << " to " << static_cast<short>(stbmsg.dest) << std::endl;
+      fl.send(stbmsg.msg, &(*addrs)[stbmsg.dest]);
       sent++;
+      
+    }
+
+    void await_ready_for_more() {
+      std::unique_lock<std::mutex> lock(Q_mutx);
+      cv_ready.wait(lock, [&]{
+        // if (resumed_flag.load()) return true;   // break wait after SIGCONT
+        return Q.size() < REFILL;
+      });
     }
 
     void bind_address(sockaddr_in* address) {
       fl.bind_address(address);
     }
 
-    void receive(std::function<void(unsigned char, char*, char*)> receive_callback) {
-      if (OO >= 1) std::cout << "stubborn receiving..." << std::endl;
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      
-      while (true) {
-        std::pair<ssize_t, char*> pair;
-        bool succeeded = fl.msg_queue.try_dequeue(pair);
-        if (!succeeded) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(10));
-          if (OO >= 3) std::cout << "sleep in receive" << std::endl;
-          continue;
-        }
-        char* buffer = pair.second;
-        ssize_t msg_len = pair.first;
+    void receiveWorker() {
+      fl.receiveWorker();
+    }
 
-        if (OO >= 3) std::cout << "st got smth" << std::endl;
-        recv++;
-        char* end = buffer + msg_len;
-        unsigned char sender = static_cast<unsigned char>(*buffer - '0');
-        
-        char second = *(buffer + 1);
-        if (second == 6) {
-          // ack
-          char third = *(buffer + 2);
-          if (third == 6) {
-            // ackack
-            receive_ackack(sender, buffer+3, end);
-          } else {
-            receive_ack(sender, buffer+2, end);
-          }
+    void receive(char* buffer) {
+      if (OO >= 5) std::cout << "st got smth" << std::endl;
+      recv++;
+      unsigned char sender = static_cast<unsigned char>(*buffer - '0');
+      
+      char second = *(buffer + 1);
+      if (second == 6) {
+        // ack
+        char third = *(buffer + 2);
+        if (third == 6) {
+          // ackack
+          receive_ackack(sender, buffer+3);
         } else {
-          receive_msg(receive_callback, sender, buffer+1, end);
+          receive_ack(sender, buffer+2);
         }
+      } else if (second == '&') {
+        {
+          std::lock_guard lock(hb_mutx);
+          last_seen[sender] = std::chrono::steady_clock::now();
+          // if (OO >= 1)
+          //   std::cout << "process " << static_cast<short>(sender) << " alive!" << std::endl;
+          if (suspected[sender] == true) {
+            if (OO >= 1)
+              std::cout << static_cast<short>(sender) << " came back from the dead" << std::endl;
+            unsuspect(sender);
+          }
+        }
+      } else {
+        receive_msg(sender, buffer+1);
       }
     }
 
-    static unsigned long hash_msg(unsigned char sender, unsigned int msg_id) {
-      return (static_cast<unsigned long>(sender) << 32) | msg_id;
+    static unsigned long hash_msg(unsigned char sender, unsigned long msg_id) {
+      // 128 = 2^7 processes
+      // msg_id is at most 2^37
+      return (static_cast<unsigned long>(sender) << 40) | msg_id;
     }
 
-    void receive_msg(std::function<void(unsigned char, char*, char*)> callback, unsigned char sender, char* buffer, char* end) {
+    void receive_msg(unsigned char sender, char* buffer) {
       r_msg++;
       char* msg = nullptr;
-      unsigned int msg_id = static_cast<unsigned int>(strtoul(buffer, &msg, 16));
+      unsigned long msg_id = strtoul(buffer, &msg, 16);
       msg++;
+
       unsigned long timestamp_ul = strtoul(msg, &msg, 16);
       // std::cout << msg_id << " " << timestamp_ul << std::endl;
       msg++;
-      if (OO >= 2)
+      if (OO >= 4)
         std::cout << "st_r " << static_cast<short>(sender)  << " " << msg_id << std::endl;
       if (timestamp_ul < cutoffs[sender]) {
-        if (OO >= 2)
+        if (OO >= 4)
           std::cout << timestamp_ul << " vs " << cutoffs[sender] << std::endl;
         return;
       }
@@ -196,43 +258,48 @@ class Stubborn {
       if (lookup.find(hash) == lookup.end()) {
         lookup.emplace(hash);
         add_to_ack(sender, msg_id);
-        callback(sender, msg, end);
+        app_receive(sender, msg);
       }
     }
 
-    void add_to_ack(unsigned char sender, unsigned int msg_id) {
+    void add_to_ack(unsigned char sender, unsigned long msg_id) {
       // std::lock_guard<std::mutex> lock(ack_mutx);
-      if (!pending_acks[sender].insert(msg_id) && OO >= 1)
+      if (!pending_acks[sender].insert(msg_id))
         std::cerr << "ack insertion failed: " << msg_id << " on sender " << static_cast<short>(sender) << std::endl;
     }
 
-    void send_acks() {
+    void ackWorker() {
       if (OO >= 1) std::cout << "running acks in stubborn" << std::endl;
       while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(ACK_INTERVAL_MILLIS));
 
         for (auto& [sender, tree] : pending_acks) {
+          {
+            std::lock_guard lock(hb_mutx);
+            if (suspected[sender])
+              continue;
+          }
           sockaddr_in* dest = &(*addrs)[sender];
           // lock for erases
           auto view = tree.readView();
-          if (OO >= 1) std::cout << "acking to "<< static_cast<short>(sender) << ": {";
+          if (OO >= 3) std::cout << "acking to "<< static_cast<short>(sender) << ": {";
           for (auto& iv : view) {
             char* msg = compose_ack(sender, iv);
-            if (OO >= 1) std::cout << "[" << iv.left << "," << iv.right << "], ";
+            if (OO >= 3) std::cout << "[" << iv.left << "," << iv.right << "], ";
             
             s_ack++;
             fl.send(msg, dest);
             free(msg);
           };
-          if (OO >= 1) std::cout << "}" << std::endl;
+          if (OO >= 3) std::cout << "}" << std::endl;
           // unlock
         }
       }
     }
 
     char* compose_ack(unsigned char sender, Interval inter) {
-      if (OO >= 3)
-        std::cout << "composing ack to " << static_cast<int>(sender)
+      if (OO >= 5)
+        std::cout << "composing ack to " << static_cast<short>(sender)
         << ", [" << inter.left << "," << inter.right << "]" << std::endl;
       
       char* buffer = static_cast<char*>(malloc(ACK_LEN));
@@ -244,39 +311,38 @@ class Stubborn {
       *ptr = 6; // ack
       ++ptr;
 
-      snprintf(ptr, _CMPRSD_S+1, "%x", inter.left);
-      while (*ptr != 0)
-        ++ptr;
-      *ptr = 31; // ascii unit separator
+      int written = snprintf(ptr, _ID_S+1, "%lx", inter.left);
+      ptr += written;
+      *ptr = 30; // ascii unit separator
       ++ptr;
 
-      snprintf(ptr, _CMPRSD_S+1, "%x", inter.right);
+      snprintf(ptr, _ID_S+1, "%lx", inter.right);
       
       return buffer;
     }
 
-    void receive_ack(unsigned char sender, char* msg, char* end) {
+    void receive_ack(unsigned char sender, char* msg) {
       r_ack++;
 
       char* sep = msg;
       
       // TODO could just copy msg to ptr...
-      unsigned int left = static_cast<unsigned int>(strtoul(sep, &sep, 16));
+      unsigned long left = strtoul(sep, &sep, 16);
       sep++;
-      unsigned int right = static_cast<unsigned int>(strtoul(sep, &sep, 16));
+      unsigned long right = strtoul(sep, &sep, 16);
       
-      if (OO >= 1)
+      if (OO >= 3)
       std::cout << "st_r_a " << static_cast<short>(sender) << ": ["
       << left << ", " << right << "]" << std::endl;
       
       // actually ACK
       {
-        std::lock_guard<std::mutex> lock(ackedset_mutx);
+        std::lock_guard<std::mutex> lock(ackedset_mutxs[sender]);
         for (auto msg_id = left; msg_id <= right; msg_id++) {
-          if (OO >= 3)
-          std::cout << "removing from sending: " << msg_id << std::endl;
+          if (OO >= 5)
+            std::cout << "removing from sending to " << sender + '0' << ": " << msg_id << std::endl;
           // remove msg_id from sending
-          acked.emplace(msg_id);
+          acked[sender].emplace(msg_id);
         }
       }
 
@@ -293,33 +359,31 @@ class Stubborn {
       *ptr = 6; // ack
       ++ptr;
       auto cutoff = std::chrono::system_clock::now().time_since_epoch().count();
-      snprintf(ptr, _TIME_S+1, "%.16lx", cutoff);
-      while (*ptr != 0)
-        ++ptr;
-      *ptr = 31; // ascii unit separator
+      int written = snprintf(ptr, _TIME_S+1, "%.16lx", cutoff);
+      ptr += written;
+      *ptr = 30; // ascii unit separator
       ++ptr;
-      snprintf(ptr, _CMPRSD_S+1, "%x", left);
-      while (*ptr != 0)
-        ++ptr;
-      *ptr = 31; // ascii unit separator
+      written = snprintf(ptr, _ID_S+1, "%lx", left);
+      ptr += written;
+      *ptr = 30; // ascii unit separator
       ++ptr;
-      snprintf(ptr, _CMPRSD_S+1, "%x", right);
+      snprintf(ptr, _ID_S+1, "%lx", right);
       fl.send(buffer, &(*addrs)[sender]); // TODO check if multithreaded sending needs checks
       free(buffer);
 
       s_ackack++;
     }
 
-    void receive_ackack(unsigned char sender, char* msg, char* end) {
+    void receive_ackack(unsigned char sender, char* msg) {
       r_ackack++;
       char* head = msg;
       unsigned long cutoff = strtoul(head, &head, 16);
       head++;
       cutoffs[sender] = cutoff;
-      unsigned int left = static_cast<unsigned int>(strtoul(head, &head, 16));
+      unsigned long left = strtoul(head, &head, 16);
       head++;
-      unsigned int right = static_cast<unsigned int>(strtoul(head, nullptr, 16));
-      if (OO >= 1)
+      unsigned long right = strtoul(head, nullptr, 16);
+      if (OO >= 3)
         std::cout << "st_r_aa " << static_cast<short>(sender) << ": ["
           << left << "," << right << "]" << std::endl;
 
@@ -335,42 +399,85 @@ class Stubborn {
       fl.listen();
     }
 
+    void heartbeats() {
+      char* hb = codec::make_heartbeat(id);  // trivial 3–4 byte msg
+      std::chrono::steady_clock::time_point now;  // trivial 3–4 byte msg
+      while (true) {
+        now = std::chrono::steady_clock::now();
+        {
+          std::lock_guard lock(hb_mutx);
+          for (auto& [p, dest] : *addrs) {
+            if (suspected[p])
+              continue;
+            if (now - last_seen[p] > std::chrono::milliseconds(SUSPECT * HEARTBEAT_MS)) {
+              suspected[p] = true;
+              if (OO >= 1)
+                std::cout << "suspecting " << static_cast<short>(p) << std::endl;
+            }
+          }
+        }
+        for (auto& [p, dest] : *addrs) {
+          fl.send(hb, &dest);
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEAT_MS));
+      }
+    }
+
+
+    void unsuspect(unsigned char p) { // has hb_mutx
+      suspected[p] = false;
+      std::lock_guard<std::mutex> lock(Q_mutx);
+
+      for (auto& msg : suspended[p]) {
+        Q.insert(msg);   // reinsert scheduled retransmissions
+      }
+      suspended[p].clear();
+
+      cv_empty.notify_one();
+    }
+
   private:
     unsigned char id;
-    FairLoss fl;
     std::unordered_map<unsigned char, struct sockaddr_in>* addrs;
-    std::function<bool()> app_send;
-
+    FairLoss fl;
+    std::function<void(unsigned char, char*)> app_receive;
     std::unordered_set<unsigned long> lookup{};
-    std::set<StubbornMsg> Q;
-    std::unordered_set<unsigned int> acked; // could be interval tree but idk since single removal
-    std::mutex ackedset_mutx;
+    std::multiset<StubbornMsg> Q;
+    // could be interval tree but idk since single removal
+    std::unordered_map<unsigned char, std::unordered_set<unsigned long>> acked;
+    std::unordered_map<unsigned char, std::mutex> ackedset_mutxs;
     // std::queue<StubbornMsg*> Q;
-    // std::unordered_map<unsigned int, StubbornMsg*> msg_index;
+    // std::unordered_map<unsigned long, StubbornMsg*> msg_index;
     std::mutex Q_mutx;
     // std::mutex ack_mutx;
     std::condition_variable cv_ready;
     std::condition_variable cv_empty;
-    std::condition_variable cv_acks;
     std::unordered_map<unsigned char, IntervalTree> pending_acks;
     std::unordered_map<unsigned char, unsigned long> cutoffs;
 
-    unsigned int send_cycles = 0;
-    unsigned int sent = 0;
-    unsigned int ack_cycles = 0;
-    unsigned int s_ack = 0;
-    unsigned int s_ackack = 0;
-    unsigned int recv = 0;
-    unsigned int r_msg = 0;
-    unsigned int r_ack = 0;
-    unsigned int r_ackack = 0;
-    unsigned int last_sent = 0;
-    unsigned int last_send_cycles = 0;
-    unsigned int last_s_ack = 0;
-    unsigned int last_r_ack = 0;
-    unsigned int last_ack_cycles = 0;
-    unsigned int last_r_msg = 0;
-    unsigned int last_recv = 0;
-    unsigned int last_s_ackack = 0;
-    unsigned int last_r_ackack = 0;
+    std::unordered_map<unsigned char, bool> suspected;
+    std::unordered_map<unsigned char, std::chrono::steady_clock::time_point> last_seen;
+    std::mutex hb_mutx;
+
+    std::unordered_map<unsigned char, std::vector<StubbornMsg>> suspended;
+
+    unsigned long send_cycles = 0;
+    unsigned long sent = 0;
+    unsigned long ack_cycles = 0;
+    unsigned long s_ack = 0;
+    unsigned long s_ackack = 0;
+    unsigned long recv = 0;
+    unsigned long r_msg = 0;
+    unsigned long r_ack = 0;
+    unsigned long r_ackack = 0;
+    unsigned long last_sent = 0;
+    unsigned long last_send_cycles = 0;
+    unsigned long last_s_ack = 0;
+    unsigned long last_r_ack = 0;
+    unsigned long last_ack_cycles = 0;
+    unsigned long last_r_msg = 0;
+    unsigned long last_recv = 0;
+    unsigned long last_s_ackack = 0;
+    unsigned long last_r_ackack = 0;
 };

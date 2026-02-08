@@ -13,24 +13,26 @@
 
 
 #include "global.h"
-#include "perfect.cpp"
+#include "lattice.cpp"
+#include "config.cpp"
 #include "ram.cpp"
 #include "msg_codec.cpp"
 
 class Process
 {
 public:
-  Process(unsigned long id_, unsigned long dest_id, unsigned long m_, const char *outputPath,
+  Process(unsigned long id_, unsigned char n, LatticeConfig* config, const char *outputPath,
           std::unordered_map<unsigned char, struct sockaddr_in> *addrs_)
       : addrs(addrs_), id(static_cast<unsigned char>(id_)),
-      network(Perfect(id, addrs, std::bind(&Process::send_batch, this)))
+        network(LatticeAgreement(id, n, config, addrs,
+          std::bind(&Process::decide, this, std::placeholders::_1, std::placeholders::_2)
+        )
+    )
   {
 
     if (OO >= 1)
       std::cout << "setting up process with id " << id_ << std::endl;
 
-    dest = static_cast<unsigned char>(dest_id); // by assumptions at most 128
-    m = static_cast<unsigned int>(m_);          // by assumptions at most 2^31-1
     network.bind_address(&(*addrs)[id]);
 
     // logs
@@ -43,9 +45,18 @@ public:
 
   void main()
   {
-    auto receive = std::bind(&Process::log_receive, this,
-                             std::placeholders::_1, std::placeholders::_2);
-    network.run(receive);
+    std::thread ew([&]{ network.enqueueWorker(); });
+    ew.detach();
+    std::thread sw([&]{ network.sendWorker(); });
+    sw.detach();
+    std::thread aw([&]{ network.ackWorker(); });
+    aw.detach();
+    std::thread rw([&]{ network.receiveWorker(); });
+    rw.detach();
+    std::thread l([&]{ network.listen(); });
+    l.detach();
+    std::thread hb([&]{ network.heartbeats(); });
+    hb.detach();
 
     if (STATS)
     {
@@ -87,93 +98,48 @@ public:
               << 1000.0 * static_cast<double>(c_end - c_start) / CLOCKS_PER_SEC << ","
               << std::chrono::duration<double, std::milli>(t_end - t_start).count() << ","
               << getCurrentRAM() << ","
-              << msg_count - last_msg_count << ","
-              << seq_nr - last_seq_nr << ","
-              << log_r - last_log_r << ",";
+              << logged - last_logged << ",";
 
-    last_seq_nr = seq_nr;
-    last_msg_count = msg_count;
-    last_log_r = log_r;
+    last_logged = logged;
   }
 
-  void log_receive(unsigned char from, char *msg)
+  void decide(unsigned int slot, std::vector<unsigned int>& value)
   {
-    unsigned int seq_nr = static_cast<unsigned int>(strtoul(msg, nullptr, 16));
-    if (OO >= 3)
-      std::cout << "logging " << seq_nr << " from " << static_cast<short>(from) << std::endl;
-    buffer += "d ";
-    buffer += std::to_string(static_cast<short>(from));
-    buffer += " ";
-    buffer += std::to_string(seq_nr);
-    buffer += "\n";
-    log_r++;
-    check_buffer();
-  }
-
-  bool send_batch()
-  {
-    if (seq_nr > m)
-      return true;
     if (OO >= 2)
-      std::cout << "keeping sending from " << seq_nr << std::endl;
-    // only send (MAX_PENDING >> 1) new messages
-    for (unsigned int i = 0; i < SEND_BURST; i++)
-    {
-
-      unsigned char k;
-      unsigned int d = m - seq_nr + 1;
-      k = (d < MAX_MSG_PER_PACKET) ? static_cast<char>(d) : MAX_MSG_PER_PACKET;
-
-      char *msg = codec::compose_batch(id, msg_count, k, seq_nr);
-      if (OO >= 4)
-        std::cout << "composed " << msg << std::endl;
-      network.send(msg_count++, msg, &(*addrs)[dest]);
-
-      for (unsigned char j = 0; j < k; j++)
-      {
-        if (OO >= 3)
-          std::cout << "logging " << static_cast<short>(seq_nr) << std::endl;
-        buffer += "b ";
-        buffer += std::to_string(seq_nr);
-        buffer += "\n";
-        seq_nr++;
-      }
-      check_buffer();
-
-      if (seq_nr > m)
-        return true;
+      std::cout << "logging decision " << slot << std::endl;
+    auto it = value.begin();
+    const auto end = value.end();
+    if (it != end)
+      buffer += std::to_string(*it++);
+    while (it != end) {
+      buffer += " " + std::to_string(*it++);
     }
-    if (OO >= 2)
-      std::cout << "sent until" << seq_nr - 1 << std::endl;
-    if (OO >= 1 && seq_nr > m)
-      std::cout << "process " << static_cast<short>(id) << " done sending." << std::endl;
-    return false;
+    buffer += '\n';
+    decs_in_buf++;
+    check_buffer();
+    logged++;
   }
 
   void check_buffer()
   {
-    if (buffer.size() >= LOG_CAP) {
+    if (decs_in_buf >= MAX_DECS_IN_BUF || buffer.size() >= LOG_CAP) {
       out << buffer;
       buffer.clear();
+      decs_in_buf = 0;
     }
   }
 
 private:
   std::unordered_map<unsigned char, struct sockaddr_in> *addrs;
   unsigned char id;
-  Perfect network;
-  unsigned char dest;
-  unsigned int m = 0;
-  unsigned int seq_nr = 1;
-  unsigned int msg_count = 1;
-  unsigned int log_r = 0;
+  LatticeAgreement network;
+  unsigned int logged = 0;
   std::string buffer;
   std::ofstream out;
+  unsigned int decs_in_buf = 0;
 
   const std::clock_t c_start = std::clock();
   const std::chrono::time_point<std::chrono::high_resolution_clock> t_start = std::chrono::high_resolution_clock::now();
-  unsigned int last_seq_nr = seq_nr;
-  unsigned int last_log_r = log_r;
-  unsigned int last_msg_count = msg_count;
+  unsigned int last_logged = logged;
   unsigned int stats_round = 0;
 };

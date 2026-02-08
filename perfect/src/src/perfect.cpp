@@ -14,26 +14,35 @@ class Perfect {
   public:
     Perfect(unsigned char id_,
       std::unordered_map<unsigned char, struct sockaddr_in>* addrs_,
-      std::function<bool()> application_send
-    ) : st(Stubborn(id_, addrs_, application_send)) {}
+      std::function<void(unsigned char, char*)> app_receive
+    ) :
+    st(
+      Stubborn(id_, addrs_,
+        std::bind(&Perfect::receive, this, std::placeholders::_1, std::placeholders::_2))
+    ), app_receive(app_receive) {}
 
     void bind_address(sockaddr_in* address) {
       st.bind_address(address);
     }
 
-    void run(std::function<void(unsigned char, char*)> receive_callback) {
-      std::thread work1([&]{ st.send_messages(); });
-      work1.detach();
-      std::thread work2([&]{ st.send_acks(); });
-      work2.detach();
-      std::thread listen(&Perfect::listen, this);
-      listen.detach();
-      std::thread receiving([this, receive_callback]{ // capture by value not reference, other
-        auto fun = std::bind(&Perfect::receive, this, receive_callback,
-          std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-        this->st.receive(fun);
-      });
-      receiving.detach();
+    void await_ready_for_more() {
+      st.await_ready_for_more();
+    }
+    
+    void sendWorker() {
+      st.sendWorker();
+    }
+    
+    void ackWorker() {
+      st.ackWorker();
+    }
+    
+    void receiveWorker() {
+      st.receiveWorker();
+    }
+    
+    void heartbeats() {
+      st.heartbeats();
     }
 
     void stats() {
@@ -43,7 +52,7 @@ class Perfect {
       last_recv = recv;
     }
 
-    void send(unsigned int msg_id, char* msg, struct sockaddr_in* dest) {
+    void send(unsigned long msg_id, char* msg, unsigned char dest) {
       sent++;
       st.send(msg_id, msg, dest);
     }
@@ -52,40 +61,17 @@ class Perfect {
       st.listen();
     }
 
-    void receive(std::function<void(unsigned char, char*)> callback, unsigned char sender, char* msg, char* end) {
-      // receives message formatted as
-      // seq_nr | seq_nr | seq_nr ...
+    void receive(unsigned char sender, char* msg) {
       recv++;
-      char* sep = msg;
-      if (OO >= 4)
-        std::cout << "buffer (size " << (end-msg) << ") " << msg << std::endl;
-      while (sep != end) {
-        char* sub_msg = sep;
-        if (OO >= 4)
-          std::cout << "rest buffer " << sub_msg << std::endl;
-        sep = std::find(sep, end, static_cast<char>(31));
-        // end sub_msg (instead of unit separator 31)
-        if (end != sep)
-          *sep = '\0';
-
-        // receive
-        if (OO >= 3)
-          std::cout << "pf_r " << static_cast<int>(sender)
-            << ": " << sub_msg << std::endl;
-
-        // receive callback
-        callback(sender, sub_msg);
-
-        if (end != sep)
-          sep++;
-      }
+      app_receive(sender, msg);
     }
 
   private:
     Stubborn st;
-    unsigned int sent = 0;
-    unsigned int recv = 0;
+    std::function<void(unsigned char, char*)> app_receive;
+    unsigned long sent = 0;
+    unsigned long recv = 0;
 
-    unsigned int last_sent = 0;
-    unsigned int last_recv = 0;
+    unsigned long last_sent = 0;
+    unsigned long last_recv = 0;
 };

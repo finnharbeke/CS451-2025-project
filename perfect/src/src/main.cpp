@@ -11,7 +11,6 @@
 
 #include "process.cpp"
 #include "config.cpp"
-#include "fairloss.cpp"
 
 Process* proc;
 
@@ -79,11 +78,11 @@ int main(int argc, char **argv) {
     std::cout << "Doing some initialization...\n\n";
   }
   
-  PerfectConfig config(parser.configPath());
+  LatticeConfig config(parser.configPath());
   
+  unsigned char n = static_cast<unsigned char>(hosts.size());
   std::unordered_map<unsigned char, struct sockaddr_in> addrs;
-  sockaddr_in rec_addr;
-  sockaddr_in my_addr;
+
   for (Parser::Host host : hosts) {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -91,17 +90,49 @@ int main(int argc, char **argv) {
     addr.sin_addr.s_addr = host.ip;
     
     addrs[static_cast<unsigned char>(host.id)] = addr;
-    if (host.id == config.i)
-      rec_addr = addr;
-    if (host.id == parser.id())
-      my_addr = addr;
+  }
+
+  switch (n) {
+    case 1:
+    case 2:
+      MAX_ACTIVE_WINDOW = 50;
+      INIT_BACKOFF = 4;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 3:
+      MAX_ACTIVE_WINDOW = 40;
+      INIT_BACKOFF = 4;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 4:
+    case 5:
+      MAX_ACTIVE_WINDOW = 30;
+      INIT_BACKOFF = 5;
+      RETRY_UNANSWERED_MILLIS = 150;
+      break;
+    case 6:
+    case 7:
+    case 8:
+      MAX_ACTIVE_WINDOW = 20;
+      INIT_BACKOFF = 6;
+      RETRY_UNANSWERED_MILLIS = 200;
+      break;
+    case 9:
+    case 10:
+      MAX_ACTIVE_WINDOW = 15;
+      INIT_BACKOFF = 6;
+      RETRY_UNANSWERED_MILLIS = 250;
+      break;
+    default:
+      MAX_ACTIVE_WINDOW = 250 / n;
+      INIT_BACKOFF = 7;
+      RETRY_UNANSWERED_MILLIS = 400;
   }
 
   // std::ios_base::sync_with_stdio(false);
   // std::cin.tie(nullptr);
   if (OO >= 1) std::cout << "Broadcasting and delivering messages...\n\n";
-  auto m = (parser.id() == config.i) ? 0 : config.m;
-  proc = new Process(parser.id(), config.i, m, parser.outputPath(), &addrs);
+  proc = new Process(parser.id(), n, &config, parser.outputPath(), &addrs);
   proc->main();
 
   if (OO >= 1) std::cout << "All done, let's sleep!\n";

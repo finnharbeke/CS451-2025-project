@@ -4,20 +4,20 @@
 #include <shared_mutex>
 
 struct Interval {
-    unsigned int left; // including
-    unsigned int right; // including
-    Interval(unsigned int l, unsigned int r) : left(l), right(r) {}
+    unsigned long left; // including
+    unsigned long right; // including
+    Interval(unsigned long l, unsigned long r) : left(l), right(r) {}
 
     bool operator<(const Interval& other) const noexcept {
         return right < other.left;
     }
-    bool operator<(const unsigned int& a) const noexcept {
+    bool operator<(const unsigned long& a) const noexcept {
         return right < a;
     }
 };
 
-bool operator<(const unsigned int& a, const Interval& it) noexcept;
-bool operator<(const unsigned int& a, const Interval& it) noexcept {
+bool operator<(const unsigned long& a, const Interval& it) noexcept;
+bool operator<(const unsigned long& a, const Interval& it) noexcept {
     return a < it.left;
 }
 
@@ -25,7 +25,7 @@ class IntervalTree {
     public:
         IntervalTree() {}
         
-        bool insert(unsigned int a) {
+        bool insert(unsigned long a) {
             std::lock_guard lock(m);
             auto l = S.find(a); // first check if
             if (l != S.end()) // already contained
@@ -52,7 +52,7 @@ class IntervalTree {
             return true;
         }
 
-        bool erase(unsigned int a, unsigned int b) {
+        bool erase(unsigned long a, unsigned long b) {
             std::lock_guard lock(m);
             // we assume it's a subinterval
             auto l = S.find(a);
@@ -86,6 +86,11 @@ class IntervalTree {
 
         ReadView readView() const {
             return ReadView(m, S);
+        }
+
+        size_t size() {
+            std::lock_guard lock(m);
+            return S.size();
         }
     
     private:
